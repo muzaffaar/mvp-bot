@@ -1513,31 +1513,6 @@ body.is-modal-open { overflow: hidden; }
     box-shadow: var(--shadow-sm);
 }
 
-/* .login-qr-art {
-    position: relative;
-    width: 220px;
-    aspect-ratio: 1;
-    display: grid;
-    place-items: center;
-    overflow: hidden;
-    border: 1px solid #d5dbe4;
-    border-radius: 18px;
-    background:
-        linear-gradient(90deg, transparent 11%, #1f2937 11% 17%, transparent 17% 22%, #1f2937 22% 28%, transparent 28% 33%, #1f2937 33% 39%, transparent 39% 44%, #1f2937 44% 50%, transparent 50% 55%, #1f2937 55% 61%, transparent 61% 66%, #1f2937 66% 72%, transparent 72% 77%, #1f2937 77% 83%, transparent 83% 89%),
-        linear-gradient(0deg, transparent 11%, #1f2937 11% 17%, transparent 17% 22%, #1f2937 22% 28%, transparent 28% 33%, #1f2937 33% 39%, transparent 39% 44%, #1f2937 44% 50%, transparent 50% 55%, #1f2937 55% 61%, transparent 61% 66%, #1f2937 66% 72%, transparent 72% 77%, #1f2937 77% 83%, transparent 83% 89%),
-        #fff;
-    background-size: 55px 55px, 55px 55px, auto;
-} */
-
-/* .login-qr-art::before,
-.login-qr-art::after {
-    content: "";
-    position: absolute;
-    width: 54px;
-    height: 54px;
-    border: 10px solid #1f2937;
-    background: #fff;
-} */
 .login-qr-art::before { top: 16px; left: 16px; }
 .login-qr-art::after { right: 16px; top: 16px; }
 .login-qr-art span {
@@ -1827,6 +1802,326 @@ body.is-modal-open { overflow: hidden; }
     .login-theme-toggle { top: 12px; right: 12px; }
 }
 
+
+/* =========================================================
+   LOGIN PAGE — NIGHT THEME
+   ========================================================= */
+
+/*
+|--------------------------------------------------------------------------
+| Theme transition
+|--------------------------------------------------------------------------
+*/
+
+.login-body,
+.login-brand-panel,
+.login-content,
+.login-theme-toggle,
+.login-field input,
+.login-submit,
+.login-telegram-card,
+.login-divider::before,
+.login-divider::after {
+    transition:
+        background-color 0.25s ease,
+        color 0.25s ease,
+        border-color 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Light theme defaults
+|--------------------------------------------------------------------------
+*/
+
+.login-body {
+    background: #f6f7fb;
+    color: #172033;
+}
+
+.login-content {
+    background: #ffffff;
+}
+
+.login-theme-toggle {
+    color: #334155;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+}
+
+.login-theme-toggle:hover {
+    background: #f8fafc;
+}
+
+.login-heading h2 {
+    color: #172033;
+}
+
+.login-heading p {
+    color: #64748b;
+}
+
+.login-telegram-card {
+    background: #ffffff;
+    border-color: #e2e8f0;
+}
+
+.login-telegram-card__title {
+    color: #172033;
+}
+
+.login-telegram-card__text {
+    color: #64748b;
+}
+
+.login-telegram-card__status {
+    color: #64748b;
+}
+
+.login-divider {
+    color: #94a3b8;
+}
+
+.login-divider::before,
+.login-divider::after {
+    background: #e2e8f0;
+}
+
+.login-field > span {
+    color: #334155;
+}
+
+.login-field input {
+    background: #ffffff;
+    color: #172033;
+    border-color: #dbe1ea;
+}
+
+.login-field input::placeholder {
+    color: #94a3b8;
+}
+
+.login-field input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Dark / night theme
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+| This supports both common theme implementations:
+|
+| <html data-theme="dark">
+| <body data-theme="dark">
+| <body class="dark">
+|
+*/
+
+/* Main page */
+
+html[data-theme="dark"] .login-body,
+body[data-theme="dark"].login-body,
+body.dark.login-body,
+[data-theme="dark"] .login-body {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+
+/* Right side login area */
+
+html[data-theme="dark"] .login-content,
+body[data-theme="dark"] .login-content,
+body.dark .login-content,
+[data-theme="dark"] .login-content {
+    background: #111827;
+}
+
+
+/* Theme button */
+
+html[data-theme="dark"] .login-theme-toggle,
+body[data-theme="dark"] .login-theme-toggle,
+body.dark .login-theme-toggle,
+[data-theme="dark"] .login-theme-toggle {
+    background: #1e293b;
+    color: #f8fafc;
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .login-theme-toggle:hover,
+body[data-theme="dark"] .login-theme-toggle:hover,
+body.dark .login-theme-toggle:hover,
+[data-theme="dark"] .login-theme-toggle:hover {
+    background: #273449;
+}
+
+
+/* Login heading */
+
+html[data-theme="dark"] .login-heading h2,
+body[data-theme="dark"] .login-heading h2,
+body.dark .login-heading h2,
+[data-theme="dark"] .login-heading h2 {
+    color: #f8fafc;
+}
+
+html[data-theme="dark"] .login-heading p,
+body[data-theme="dark"] .login-heading p,
+body.dark .login-heading p,
+[data-theme="dark"] .login-heading p {
+    color: #94a3b8;
+}
+
+
+/* Telegram QR card */
+
+html[data-theme="dark"] .login-telegram-card,
+body[data-theme="dark"] .login-telegram-card,
+body.dark .login-telegram-card,
+[data-theme="dark"] .login-telegram-card {
+    background: #172033;
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .login-telegram-card__title,
+body[data-theme="dark"] .login-telegram-card__title,
+body.dark .login-telegram-card__title,
+[data-theme="dark"] .login-telegram-card__title {
+    color: #f1f5f9;
+}
+
+html[data-theme="dark"] .login-telegram-card__text,
+html[data-theme="dark"] .login-telegram-card__status,
+body[data-theme="dark"] .login-telegram-card__text,
+body[data-theme="dark"] .login-telegram-card__status,
+body.dark .login-telegram-card__text,
+body.dark .login-telegram-card__status,
+[data-theme="dark"] .login-telegram-card__text,
+[data-theme="dark"] .login-telegram-card__status {
+    color: #94a3b8;
+}
+
+
+/* Divider */
+
+html[data-theme="dark"] .login-divider,
+body[data-theme="dark"] .login-divider,
+body.dark .login-divider,
+[data-theme="dark"] .login-divider {
+    color: #64748b;
+}
+
+html[data-theme="dark"] .login-divider::before,
+html[data-theme="dark"] .login-divider::after,
+body[data-theme="dark"] .login-divider::before,
+body[data-theme="dark"] .login-divider::after,
+body.dark .login-divider::before,
+body.dark .login-divider::after,
+[data-theme="dark"] .login-divider::before,
+[data-theme="dark"] .login-divider::after {
+    background: #334155;
+}
+
+
+/* Form labels */
+
+html[data-theme="dark"] .login-field > span,
+body[data-theme="dark"] .login-field > span,
+body.dark .login-field > span,
+[data-theme="dark"] .login-field > span {
+    color: #cbd5e1;
+}
+
+
+/* Inputs */
+
+html[data-theme="dark"] .login-field input,
+body[data-theme="dark"] .login-field input,
+body.dark .login-field input,
+[data-theme="dark"] .login-field input {
+    background: #0f172a;
+    color: #f8fafc;
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .login-field input::placeholder,
+body[data-theme="dark"] .login-field input::placeholder,
+body.dark .login-field input::placeholder,
+[data-theme="dark"] .login-field input::placeholder {
+    color: #64748b;
+}
+
+html[data-theme="dark"] .login-field input:focus,
+body[data-theme="dark"] .login-field input:focus,
+body.dark .login-field input:focus,
+[data-theme="dark"] .login-field input:focus {
+    background: #111827;
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14);
+}
+
+
+/* Error text */
+
+html[data-theme="dark"] .login-field-error,
+body[data-theme="dark"] .login-field-error,
+body.dark .login-field-error,
+[data-theme="dark"] .login-field-error {
+    color: #f87171;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| QR image area
+|--------------------------------------------------------------------------
+*/
+
+html[data-theme="dark"] .login-qr-art,
+body[data-theme="dark"] .login-qr-art,
+body.dark .login-qr-art,
+[data-theme="dark"] .login-qr-art {
+    background: #ffffff;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Security note
+|--------------------------------------------------------------------------
+*/
+
+html[data-theme="dark"] .login-security-note,
+body[data-theme="dark"] .login-security-note,
+body.dark .login-security-note,
+[data-theme="dark"] .login-security-note {
+    color: #94a3b8;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Mobile
+|--------------------------------------------------------------------------
+*/
+
+@media (max-width: 900px) {
+
+    html[data-theme="dark"] .login-content,
+    body[data-theme="dark"] .login-content,
+    body.dark .login-content,
+    [data-theme="dark"] .login-content {
+        background: #111827;
+    }
+
+}
 /* ========================================
    Staff profile
 ======================================== */
