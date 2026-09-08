@@ -3,6 +3,7 @@
 namespace App\Notifications\Channels;
 
 use App\Models\Staff;
+use App\Models\TaskTelegramMessage;
 use App\Telegram\Services\TelegramClient;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Log;
@@ -48,14 +49,44 @@ class TelegramChannel
         $preparedAttachments = $this->prepareAttachments($attachments);
         $sentAttachmentMessageIds = [];
 
+        $taskId = $this->taskIdForTelegramLink($notification);
+        $telegramMessageRole = $this->telegramMessageRole($notification);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Replace previous task update notification
+        |--------------------------------------------------------------------------
+        |
+        | For notifications that belong to a specific task and define a Telegram
+        | message role, remove the previous notification for this exact task and
+        | recipient before sending the new one.
+        |
+        */
+
+        if ($taskId !== null && $telegramMessageRole !== null) {
+            $this->deletePreviousTaskNotifications(
+                taskId: $taskId,
+                staffId: $notifiable->id,
+                role: $telegramMessageRole,
+            );
+        }
+
         try {
             // 1. No media: normal notification.
             if ($preparedAttachments === []) {
-                $this->telegram->sendMessage(
+                $response = $this->telegram->sendMessage(
                     chatId: $chatId,
                     text: $message,
                     parseMode: 'HTML',
                     replyMarkup: $replyMarkup,
+                );
+
+                $this->recordTaskNotificationMessage(
+                    taskId: $taskId,
+                    staffId: $notifiable->id,
+                    chatId: (int) $chatId,
+                    messageId: $this->messageIdFromResponse($response),
+                    role: $telegramMessageRole,
                 );
 
                 return;
@@ -159,6 +190,99 @@ class TelegramChannel
                 $sentAttachmentMessageIds,
             );
         }
+    }
+
+    private function taskIdForTelegramLink(
+        Notification $notification,
+    ): ?int {
+        if (! method_exists($notification, 'taskIdForTelegramLink')) {
+            return null;
+        }
+
+        $taskId = $notification->taskIdForTelegramLink();
+
+        return is_numeric($taskId)
+            ? (int) $taskId
+            : null;
+    }
+
+    private function telegramMessageRole(
+        Notification $notification,
+    ): ?string {
+        if (! method_exists($notification, 'telegramMessageRole')) {
+            return null;
+        }
+
+        $role = $notification->telegramMessageRole();
+
+        return is_string($role) && $role !== ''
+            ? $role
+            : null;
+    }
+
+    private function deletePreviousTaskNotifications(
+        int $taskId,
+        int $staffId,
+        string $role,
+    ): void {
+        $messages = TaskTelegramMessage::query()
+            ->where('task_id', $taskId)
+            ->where('staff_id', $staffId)
+            ->where('role', $role)
+            ->get();
+
+        foreach ($messages as $message) {
+            try {
+                $this->telegram->deleteMessage(
+                    (int) $message->chat_id,
+                    (int) $message->message_id,
+                );
+            } catch (\Throwable $e) {
+                /*
+                * Telegram may already have deleted the message or the message
+                * may no longer be deletable. We still remove the stale local
+                * record below.
+                */
+                Log::debug(
+                    'Previous Telegram task notification cleanup failed.',
+                    [
+                        'task_id' => $taskId,
+                        'staff_id' => $staffId,
+                        'message_id' => $message->message_id,
+                    ]
+                );
+            }
+        }
+
+        TaskTelegramMessage::query()
+            ->where('task_id', $taskId)
+            ->where('staff_id', $staffId)
+            ->where('role', $role)
+            ->delete();
+    }
+
+    private function recordTaskNotificationMessage(
+        ?int $taskId,
+        int $staffId,
+        int $chatId,
+        ?int $messageId,
+        ?string $role,
+    ): void {
+        if (
+            $taskId === null
+            || $messageId === null
+            || $role === null
+        ) {
+            return;
+        }
+
+        TaskTelegramMessage::create([
+            'task_id' => $taskId,
+            'staff_id' => $staffId,
+            'chat_id' => $chatId,
+            'message_id' => $messageId,
+            'role' => $role,
+        ]);
     }
 
     private function prepareAttachments(array $attachments): array

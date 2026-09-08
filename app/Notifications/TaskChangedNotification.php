@@ -42,6 +42,11 @@ class TaskChangedNotification extends Notification
         return $this->task->id;
     }
 
+    public function telegramMessageRole(): string
+    {
+        return 'task_update';
+    }
+
     public function toTelegram(Staff $notifiable): string
     {
         $lines = [];
