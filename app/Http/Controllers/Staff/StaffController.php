@@ -220,6 +220,7 @@ class StaffController extends Controller
 
             'group_name' =>
                 $validated['group_name'] ?? null,
+            'password' => Hash::make($validated['password']) ?? null,
         ]);
 
         /*
