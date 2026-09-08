@@ -9,6 +9,7 @@ use App\Models\Staff;
 use App\Models\Task;
 use App\Models\TaskComment;
 use App\Models\TaskTelegramMessage;
+use App\Support\TashkentDateTime;
 use App\Telegram\Services\TelegramClient;
 use Carbon\Carbon;
 use DomainException;
@@ -179,7 +180,7 @@ class TaskManagementService
             . "🔢 <b>Raqam:</b> {$task->task_number}\n"
             . "📌 <b>Vazifa:</b> " . e($task->title) . "\n"
             . "📊 <b>Holat:</b> {$task->status->label()}\n"
-            . "📅 <b>Muddat:</b> " . ($task->deadline?->format('d.m.Y H:i') ?? 'Belgilanmagan'),
+            . "📅 <b>Muddat:</b> " . (TashkentDateTime::format($task->deadline) ?? 'Belgilanmagan'),
             parseMode: 'HTML');
         $task->logs()->create(['actor_id'=>$actor->id,'event_type'=>TaskLogEventType::STATUS_CHANGED,'from_status'=>$task->status,'to_status'=>$task->status,'message'=>'Reminder sent to assignee.']);
     }
@@ -216,7 +217,7 @@ class TaskManagementService
             . "📌 <b>Vazifa:</b> " . e($task->title) . "\n"
             . "📝 <b>Tavsif:</b> " . e($task->description ?: '—') . "\n"
             . "👤 <b>Beruvchi:</b> " . e($task->assignor?->full_name ?: '—') . "\n"
-            . "⏰ <b>Muddat:</b> " . ($task->deadline?->format('d.m.Y H:i') ?? 'Belgilanmagan'),
+            . "⏰ <b>Muddat:</b> " . (TashkentDateTime::format($task->deadline) ?? 'Belgilanmagan'),
             ['inline_keyboard'=>[[['text'=>'✅ Qabul qilish','callback_data'=>"task:status:{$task->id}:accepted"]]]], 'HTML');
         $messageId = $response['result']['message_id'] ?? null;
         if ($messageId) TaskTelegramMessage::create(['task_id'=>$task->id,'staff_id'=>$task->assignee->id,'chat_id'=>$task->assignee->telegram_chat_id,'message_id'=>$messageId]);
