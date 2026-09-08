@@ -141,14 +141,14 @@
                             <dd><time data-task-detail="created-at-side"></time></dd>
                         </div>
                     </dl>
-                    <div class="task-detail-actions">
+                    {{-- <div class="task-detail-actions">
                         <button class="btn btn--primary" data-action="start-task" type="button">Ishni
                             boshlash</button>
                         <button class="btn btn--ghost" data-action="cancel-assignment" type="button">Biriktirishni
                             bekor qilish</button>
                         <button class="btn btn--danger" data-action="archive-task" type="button">Topshiriqni
                             arxivlash</button>
-                    </div>
+                    </div> --}}
                 </aside>
             </div>
         </section>
