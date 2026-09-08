@@ -196,9 +196,9 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
                     </div>
 
 
-                    <button class="kanban-column__add" data-action="open-create-task" type="button">
+                    {{-- <button class="kanban-column__add" data-action="open-create-task" type="button">
                         ＋ Qo‘shish
-                    </button>
+                    </button> --}}
 
                 </section>
 
