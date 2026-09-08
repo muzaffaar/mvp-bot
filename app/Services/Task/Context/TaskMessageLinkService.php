@@ -13,6 +13,11 @@ class TaskMessageLinkService
         return TaskTelegramMessage::query()
             ->where('chat_id', $chatId)
             ->where('message_id', $messageId)
+            ->whereIn('role', [
+                'original',
+                'task_created_notification',
+                'context',
+            ])
             ->with('task')
             ->latest('id')
             ->first()?->task;

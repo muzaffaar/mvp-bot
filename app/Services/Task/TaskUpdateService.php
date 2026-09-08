@@ -53,7 +53,7 @@ class TaskUpdateService
                 $task->update($data);
             }
 
-            $this->links->link($task, $chatId, $messageId, $actor, 'update');
+            // $this->links->link($task, $chatId, $messageId, $actor, 'update');
 
             if ($changes !== []) {
                 TaskChanged::dispatch($task->fresh(['assignee', 'assignor']), $actor, $changes);

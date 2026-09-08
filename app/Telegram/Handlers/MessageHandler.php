@@ -11,6 +11,7 @@ use App\Telegram\Services\TelegramClient;
 use App\Telegram\Callbacks\TaskManagementCallback;
 use RuntimeException;
 use Illuminate\Support\Facades\Storage;
+use App\Services\Task\Context\TaskMessageContextResolver;
 
 class MessageHandler
 {
@@ -22,6 +23,7 @@ class MessageHandler
         private readonly GeminiClient $gemini,
         private readonly TelegramClient $telegram,
         private readonly TaskManagementCallback $taskManagement,
+        private readonly TaskMessageContextResolver $taskContextResolver,
     ) {
     }
 
@@ -90,6 +92,41 @@ class MessageHandler
         // Preserve the existing normal-message pipeline exactly.
         $text = $this->extractText($message);
 
+        /*
+        |--------------------------------------------------------------------------
+        | Group conversation isolation
+        |--------------------------------------------------------------------------
+        |
+        | Telegram groups may contain normal conversations between admins and staff.
+        | Do not send ordinary conversation messages to the task AI pipeline.
+        |
+        | A reply in a group is allowed into task processing only when the replied
+        | message is explicitly linked to a task.
+        |
+        */
+
+        if ($this->isGroupChat($message)) {
+            $reply = $message['reply_to_message'] ?? null;
+
+            if ($reply !== null) {
+                $messageContext = $this->taskContextResolver->resolve(
+                    $staff,
+                    $message
+                );
+
+                /*
+                * This is a reply to an ordinary group message.
+                *
+                * It is not a task follow-up, so completely ignore it.
+                */
+                if (
+                    ($messageContext['reply_task']['id'] ?? null) === null
+                ) {
+                    return;
+                }
+            }
+        }
+
         if ($text === null) {
             return;
         }
@@ -101,7 +138,14 @@ class MessageHandler
         );
     }
 
-
+    private function isGroupChat(array $message): bool
+    {
+        return in_array(
+            $message['chat']['type'] ?? null,
+            ['group', 'supergroup'],
+            true
+        );
+    }
 
     /**
      * Task title/description editing is text-based in the database, so voice and
