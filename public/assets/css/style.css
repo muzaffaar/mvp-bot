@@ -664,20 +664,73 @@ body[data-page="tasks"] .app-sidebar {
 }
 
 .tasks-view--kanban {
+    /*
+     * Cross-browser horizontal Kanban scrolling.
+     *
+     * Chrome/Safari on macOS can use overlay scrollbars, and Safari is more
+     * sensitive to grid tracks using flexible 1fr sizing inside an overflow
+     * container. Give the board explicit intrinsic column widths so its scroll
+     * width is always calculated correctly.
+     */
     height: 100%;
     min-height: 0;
     display: grid;
-    grid-template-columns: repeat(7, minmax(292px, 1fr));
+    grid-template-columns: repeat(7, 292px);
     gap: 14px;
-    overflow-x: auto;
+
+    /* Always create a horizontal scrolling context. */
+    overflow-x: scroll;
     overflow-y: hidden;
-    padding: 0 0 10px;
+
+    /* Keep room for the horizontal scrollbar where the browser supports it. */
+    scrollbar-gutter: stable both-edges;
+
+    /* Smooth native scrolling on Safari/iOS and trackpad devices. */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+
+    padding: 0 0 12px;
     align-items: stretch;
     scroll-snap-type: x proximity;
+    scroll-snap-stop: normal;
+    scroll-behavior: smooth;
+
+    /* Prevent Safari from treating the grid as shrinkable content. */
+    min-width: 0;
+
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--text-muted) 55%, transparent)
+                     color-mix(in srgb, var(--surface-alt) 70%, transparent);
+}
+
+/* Chromium / Safari / WebKit horizontal scrollbar styling. */
+.tasks-view--kanban::-webkit-scrollbar {
+    height: 12px;
+}
+
+.tasks-view--kanban::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--surface-alt) 70%, transparent);
+    border-radius: 999px;
+}
+
+.tasks-view--kanban::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+}
+
+.tasks-view--kanban::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+    border: 3px solid transparent;
+    background-clip: padding-box;
 }
 
 .kanban-column {
+    width: 292px;
     min-width: 292px;
+    max-width: 292px;
     min-height: 0;
     height: 100%;
     display: flex;
