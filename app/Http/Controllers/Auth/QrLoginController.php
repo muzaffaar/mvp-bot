@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\SecurityLogEventType;
 use App\Http\Controllers\Controller;
 use App\Models\QrLoginSession;
+use App\Models\SecurityLog;
 use App\Services\Authentication\QrLoginService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -158,6 +160,14 @@ class QrLoginController extends Controller
          */
         $request->session()->regenerate();
 
+        SecurityLog::record(
+            eventType: SecurityLogEventType::LOGIN_SUCCESS,
+            staffId: $staff->id,
+            description: 'Telegram QR orqali kirish',
+            ipAddress: $request->ip(),
+            userAgent: $request->userAgent(),
+        );
+
         /*
          * IMPORTANT:
          *
@@ -178,10 +188,21 @@ class QrLoginController extends Controller
     public function logout(
         Request $request
     ): RedirectResponse {
+        $staffId = Auth::id();
+
         Auth::logout();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+
+        if ($staffId) {
+            SecurityLog::record(
+                eventType: SecurityLogEventType::LOGOUT,
+                staffId: $staffId,
+                ipAddress: $request->ip(),
+                userAgent: $request->userAgent(),
+            );
+        }
 
         return redirect()->route('login');
     }

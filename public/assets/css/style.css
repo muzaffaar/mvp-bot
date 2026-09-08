@@ -1650,6 +1650,17 @@ body.is-modal-open { overflow: hidden; }
 ======================================== */
 .security-page { max-width: 1440px; margin: 0 auto; }
 .security-page__header { align-items: flex-start; }
+.alert {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+.alert ul { margin: 0; padding-left: 18px; font-weight: 500; }
+.alert--success { background: var(--success-soft); color: var(--success); }
+.alert--error { background: var(--danger-soft); color: var(--danger); }
 .security-cards {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

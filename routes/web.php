@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Auth\QrLoginController;
 use App\Http\Controllers\Group\GroupController;
 use App\Http\Controllers\Notification\NotificationController;
+use App\Http\Controllers\Security\SecurityController;
 use App\Http\Controllers\Staff\StaffController;
 use App\Http\Controllers\Task\SprintController;
 use App\Http\Controllers\Task\TaskCommentController;
@@ -289,7 +290,32 @@ Route::middleware('auth')->group(function () {
             )->name('tasks.remove');
         });
 
-    Route::get('security', fn () => view('security.index'))->name('security.index');
+    /*
+    |--------------------------------------------------------------------------
+    | Security
+    |--------------------------------------------------------------------------
+    */
+
+    Route::prefix('security')
+        ->name('security.')
+        ->group(function () {
+
+            Route::get(
+                '/',
+                [SecurityController::class, 'index']
+            )->name('index');
+
+            Route::put(
+                '/password',
+                [SecurityController::class, 'updatePassword']
+            )->name('password.update');
+
+            Route::delete(
+                '/sessions/{session}',
+                [SecurityController::class, 'destroySession']
+            )->name('sessions.destroy');
+        });
+
     Route::get('chain', fn () => view('chain.index'))->name('chain.index');
     Route::get('reports', fn () => view('reports.index'))->name('reports.index');
 });

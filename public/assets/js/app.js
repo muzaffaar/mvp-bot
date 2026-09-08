@@ -2811,84 +2811,6 @@ function applyKanbanFilters() {
         });
     }
 
-    function formatAuditDate(value) {
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return "—";
-        return new Intl.DateTimeFormat("uz-UZ", {
-            day: "2-digit",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit"
-        }).format(date);
-    }
-
-    function renderSecurityLogs() {
-        const list = document.getElementById("security-logs-list");
-        if (!list) return;
-        clearNode(list);
-        (db.audit || []).slice(0, 5).forEach((entry) => {
-            const fragment = cloneTemplate("security-log-template");
-            if (!fragment) return;
-            setText(fragment, '[data-field="action"]', entry.action || "Xavfsizlik amali");
-            setText(fragment, '[data-field="object"]', entry.obj || "—");
-            setText(fragment, '[data-field="date"]', formatAuditDate(entry.at));
-            list.append(fragment);
-        });
-    }
-
-    function renderSecuritySessions() {
-        const list = document.getElementById("sessions-list");
-        if (!list) return;
-        clearNode(list);
-        (db.sessions || []).forEach((session) => {
-            const fragment = cloneTemplate("session-template");
-            const item = fragment?.querySelector("[data-session-id]");
-            if (!item) return;
-            item.dataset.sessionId = session.id || "";
-            setText(item, '[data-field="device"]', session.dev || session.device || "Sessiya");
-            setText(item, '[data-field="location"]', session.loc || session.location || "Noma’lum joylashuv");
-            setText(item, '[data-field="ip"]', session.ip || "IP noma’lum");
-            setText(item, '[data-field="last-active"]', session.at || session.last || session.lastActive || "Hozir");
-            const current = item.querySelector('[data-field="current"]');
-            if (current) current.hidden = !session.cur;
-            const removeButton = item.querySelector('[data-action="remove-session"]');
-            if (removeButton && session.cur) removeButton.textContent = "Bu qurilmadan chiqish";
-            list.append(fragment);
-        });
-    }
-
-    function renderSecurity() {
-        renderSecurityLogs();
-        renderSecuritySessions();
-    }
-
-    function bindSecurity() {
-        document.getElementById("security-form")?.addEventListener("submit", (event) => {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const newPassword = form.elements.new_password?.value || "";
-            const confirmation = form.elements.new_password_confirmation?.value || "";
-            if (newPassword !== confirmation) {
-                window.alert("Yangi parol va tasdiqlash qiymati bir xil bo‘lishi kerak.");
-                return;
-            }
-            window.alert("Demo: parolni yangilash uchun Laravel backend endpointiga ulang.");
-            form.reset();
-        });
-
-        document.getElementById("sessions-list")?.addEventListener("click", (event) => {
-            const button = event.target.closest('[data-action="remove-session"]');
-            const sessionElement = event.target.closest("[data-session-id]");
-            if (!button || !sessionElement) return;
-            const sessionId = sessionElement.dataset.sessionId;
-            const sessions = db.sessions || [];
-            const index = sessions.findIndex((session) => String(session.id) === String(sessionId));
-            if (index === -1) return;
-            sessions.splice(index, 1);
-            renderSecuritySessions();
-        });
-    }
-
     function bindLogin() {
         document.getElementById("login-form")?.addEventListener("submit", (event) => {
             window.location.href = "dashboard";
@@ -3055,10 +2977,6 @@ function initialize() {
         if (page === "people") bindPeople();
         if (page === "reports") renderReports();
         if (page === "chain") renderChain();
-        if (page === "security") {
-            renderSecurity();
-            bindSecurity();
-        }
         if (page === "login") bindLogin();
         initializeDashboard();
     }

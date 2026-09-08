@@ -73,35 +73,49 @@ class AssigneeResolver
 
     private function matches(string $input, Staff $staff): bool
     {
-        $inputVariants = $this->variants($input);
-
         /*
-         * Compare against full name.
+         * Tokenize the input the same way staff names/usernames are
+         * tokenized below.
+         *
+         * Comparing a multi-word input ("Jasur Rahimov") as a single
+         * blob against individual staff tokens ("jasur", "rahimov")
+         * almost never clears the fuzzy-match thresholds. Instead,
+         * every input token must strong-match some staff token.
          */
-        foreach ($this->tokens($staff->full_name) as $token) {
-            foreach ($inputVariants as $inputVariant) {
-                if ($this->isStrongMatch($inputVariant, $token)) {
-                    return true;
-                }
-            }
+        $inputTokens = $this->tokens($input);
+
+        if ($inputTokens === []) {
+            return false;
         }
 
-        /*
-         * Also compare against username.
-         *
-         * Username can be null.
-         */
-        if (!empty($staff->username)) {
-            foreach ($this->tokens($staff->username) as $token) {
-                foreach ($inputVariants as $inputVariant) {
-                    if ($this->isStrongMatch($inputVariant, $token)) {
-                        return true;
+        $staffTokens = array_merge(
+            $this->tokens($staff->full_name),
+            $this->tokens($staff->username)
+        );
+
+        if ($staffTokens === []) {
+            return false;
+        }
+
+        foreach ($inputTokens as $inputToken) {
+            $tokenMatched = false;
+
+            foreach ($this->variants($inputToken) as $inputVariant) {
+                foreach ($staffTokens as $staffToken) {
+                    if ($this->isStrongMatch($inputVariant, $staffToken)) {
+                        $tokenMatched = true;
+
+                        break 2;
                     }
                 }
             }
+
+            if (!$tokenMatched) {
+                return false;
+            }
         }
 
-        return false;
+        return true;
     }
 
     /**

@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\SecurityLogEventType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\SecurityLog;
+use App\Models\Staff;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -27,6 +30,14 @@ class LoginController extends Controller
         $remember = $request->boolean('remember');
 
         if (! Auth::attempt($credentials, $remember)) {
+            SecurityLog::record(
+                eventType: SecurityLogEventType::LOGIN_FAILED,
+                staffId: Staff::where('login', $credentials['login'])->value('id'),
+                description: "Muvaffaqiyatsiz urinish: {$credentials['login']}",
+                ipAddress: $request->ip(),
+                userAgent: $request->userAgent(),
+            );
+
             return back()
                 ->withInput($request->only('login'))
                 ->withErrors([
@@ -35,6 +46,13 @@ class LoginController extends Controller
         }
 
         $request->session()->regenerate();
+
+        SecurityLog::record(
+            eventType: SecurityLogEventType::LOGIN_SUCCESS,
+            staffId: Auth::id(),
+            ipAddress: $request->ip(),
+            userAgent: $request->userAgent(),
+        );
 
         return redirect()->intended(
             route('dashboard')

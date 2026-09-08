@@ -69,6 +69,11 @@ class Staff extends Authenticatable
         return $this->hasMany(QrLoginSession::class);
     }
 
+    public function securityLogs()
+    {
+        return $this->hasMany(SecurityLog::class);
+    }
+
     public function isActive(): bool
     {
         return $this->status === 'active';
