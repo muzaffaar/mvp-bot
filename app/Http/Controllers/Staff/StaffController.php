@@ -116,9 +116,6 @@ class StaffController extends Controller
         Staff $staff
     ): RedirectResponse {
 
-        // $staff = Staff::query()->where('id', $request->input('person_id'))->first();
-        // dd($staff);
-
         $validated = $request->validate([
             'full_name' => [
                 'required',
@@ -220,7 +217,7 @@ class StaffController extends Controller
 
             'group_name' =>
                 $validated['group_name'] ?? null,
-            'password' => Hash::make($validated['password']) ?? null,
+
         ]);
 
         /*
