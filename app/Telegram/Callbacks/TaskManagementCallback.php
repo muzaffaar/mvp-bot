@@ -40,6 +40,8 @@ class TaskManagementCallback
     {
         try {
             if (preg_match('/^tm:list:(my|given|progress|due|overdue|closed):(first|last|\d+)$/', $data, $m)) { $this->list($staff,$m[1],$m[2],$callbackId,$chatId,$messageId); return; }
+            if (preg_match('/^tm:list:given_search:(first|last|\d+)$/', $data, $m)) { $this->listGivenSearch($staff,$m[1],$callbackId,$chatId,$messageId); return; }
+            if ($data === 'tm:search:given') { $this->promptGivenSearch($staff,$callbackId,$chatId,$messageId); return; }
             if ($data === 'tm:home') { $this->home($staff,$callbackId,$chatId,$messageId); return; }
             if (preg_match('/^tm:view:(\d+)$/',$data,$m)) { $this->view($staff,(int)$m[1],$callbackId,$chatId,$messageId); return; }
             if (preg_match('/^tm:status:(\d+):(accepted|in_progress|awaiting_acceptance)$/',$data,$m)) { $this->statusAction($staff,(int)$m[1],TaskStatus::from($m[2]),$callbackId,$chatId,$messageId); return; }
@@ -73,6 +75,14 @@ class TaskManagementCallback
             $this->telegram->sendMessage($chatId,'✅ Izoh saqlandi.');
             return true;
         }
+        if ($conversation->state === TelegramConversationState::WAITING_TASK_MANAGEMENT_ASSIGNEE_SEARCH->value) {
+            $this->requirePermission($staff, Permission::TaskCreate);
+            $term = trim($text);
+            if ($term === '') throw new DomainException('Qidiruv uchun xodim ismini yozing.');
+            $conversation->update(['state'=>TelegramConversationState::IDLE->value,'context'=>['given_search_term'=>$term],'last_activity_at'=>now()]);
+            $this->renderGivenSearchResults($staff,$chatId,$term,1);
+            return true;
+        }
         if ($conversation->state === TelegramConversationState::WAITING_TASK_MANAGEMENT_INPUT->value && ($context['action']??null)==='edit') {
             $this->requirePermission($staff, Permission::TaskUpdate);
             $task=$this->service->taskForViewer((int)($context['task_id']??0),$staff);
@@ -89,8 +99,15 @@ class TaskManagementCallback
     public function home(Staff $staff,string $cb,int $chat,int $mid): void { $this->telegram->answerCallbackQuery($cb); $this->clean($chat,$mid); $this->sendHome($chat,$staff); }
     public function sendHome(int $chat, ?Staff $staff = null): void {
         if ($staff && ! $this->has($staff, Permission::TaskView)) { $this->telegram->sendMessage($chat, '❌ Vazifalarni ko‘rish uchun ruxsatingiz yo‘q.'); return; }
+        $firstRow = [['text'=>'📌 Mening vazifalarim','callback_data'=>'tm:list:my:1']];
+        // "Men bergan" (tasks I assigned to others) only makes sense for staff
+        // who can actually create/assign tasks — everyone else would just see
+        // an empty list.
+        if ($staff && $this->has($staff, Permission::TaskCreate)) {
+            $firstRow[] = ['text'=>'📤 Men bergan','callback_data'=>'tm:list:given:1'];
+        }
         $this->telegram->sendMessage($chat,"📋 <b>Vazifalarni boshqarish</b>\n\nKerakli bo‘limni tanlang:",[ 'inline_keyboard'=>[
-        [['text'=>'📌 Mening vazifalarim','callback_data'=>'tm:list:my:1'],['text'=>'📤 Men bergan','callback_data'=>'tm:list:given:1']],
+        $firstRow,
         [['text'=>'⏳ Jarayondagi','callback_data'=>'tm:list:progress:1'],['text'=>'⚠️ Muddati yaqin','callback_data'=>'tm:list:due:1']],
         [['text'=>'🔴 Muddati o‘tgan','callback_data'=>'tm:list:overdue:1'],['text'=>'📁 Yopilgan','callback_data'=>'tm:list:closed:1']],
     ]],'HTML'); }
@@ -133,8 +150,99 @@ class TaskManagementCallback
         $nav[]=['text'=>$tasks->currentPage().'/'.$tasks->lastPage(),'callback_data'=>'tm:noop'];
         if($tasks->hasMorePages()) $nav[]=['text'=>'➡️','callback_data'=>"tm:list:{$type}:".($tasks->currentPage()+1)];
         if($tasks->currentPage()<$tasks->lastPage()) $nav[]=['text'=>'⏭','callback_data'=>"tm:list:{$type}:last"];
-        $kb[]=$nav; $kb[]=[['text'=>'⬅️ Menyu','callback_data'=>'tm:home']];
+        $kb[]=$nav;
+        if ($type === 'given') {
+            $kb[]=[['text'=>'🔍 Bajaruvchi bo‘yicha qidirish','callback_data'=>'tm:search:given']];
+        }
+        $kb[]=[['text'=>'⬅️ Menyu','callback_data'=>'tm:home']];
         $this->telegram->sendMessage($chat,"<b>{$labels[$type]}</b>\n\nVazifani tanlang:",['inline_keyboard'=>$kb],'HTML');
+    }
+
+    /**
+     * Prompt the assignor (task creator) for an assignee name/surname to
+     * filter their "Men bergan" (tasks I assigned) list by.
+     */
+    private function promptGivenSearch(Staff $staff, string $cb, int $chat, int $mid): void {
+        $this->requirePermission($staff, Permission::TaskCreate);
+        $this->telegram->answerCallbackQuery($cb);
+        $this->clean($chat,$mid);
+        $conversation = $this->conversations->getOrCreate($staff,$chat);
+        $this->conversations->setState($conversation, TelegramConversationState::WAITING_TASK_MANAGEMENT_ASSIGNEE_SEARCH);
+        $this->telegram->sendMessage(
+            $chat,
+            "🔍 <b>Bajaruvchi bo‘yicha qidirish</b>\n\nXodimning ismi yoki familiyasini yozing:",
+            ['inline_keyboard'=>[[['text'=>'⬅️ Bekor qilish','callback_data'=>'tm:list:given:1']]]],
+            'HTML',
+        );
+    }
+
+    /**
+     * Paginate through the assignee-name search results using the term
+     * stored in the conversation context by promptGivenSearch()/handleInput().
+     */
+    private function listGivenSearch(Staff $staff, string|int $page, string $cb, int $chat, int $mid): void {
+        $this->requirePermission($staff, Permission::TaskCreate);
+        $conversation = $this->conversations->getOrCreate($staff,$chat);
+        $term = trim((string) ($conversation->context['given_search_term'] ?? ''));
+        $this->telegram->answerCallbackQuery($cb);
+        $this->clean($chat,$mid);
+
+        if ($term === '') {
+            $this->telegram->sendMessage($chat,'🔍 Qidiruv muddati tugagan. Qaytadan qidiring.',['inline_keyboard'=>[
+                [['text'=>'🔍 Qidirish','callback_data'=>'tm:search:given']],
+                [['text'=>'⬅️ Menyu','callback_data'=>'tm:home']],
+            ]]);
+            return;
+        }
+
+        $this->renderGivenSearchResults($staff,$chat,$term,$page);
+    }
+
+    private function renderGivenSearchResults(Staff $staff, int $chat, string $term, string|int $page): void {
+        $query = Task::query()
+            ->where('assignor_id', $staff->id)
+            ->where('status', '!=', TaskStatus::CLOSED->value)
+            ->whereHas('assignee', function ($q) use ($term) {
+                $q->where('full_name', 'like', '%'.$term.'%');
+            });
+
+        $perPage = 8;
+        $total = (clone $query)->count();
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $resolvedPage = match ((string) $page) {
+            'first' => 1,
+            'last' => $lastPage,
+            default => min(max(1, (int) $page), $lastPage),
+        };
+        $tasks = $query->orderByRaw('deadline IS NULL, deadline')->paginate($perPage,['*'],'page',$resolvedPage);
+        $header = '🔍 <b>"'.e($term).'" bo‘yicha natijalar</b>';
+
+        if ($tasks->isEmpty()) {
+            $this->telegram->sendMessage($chat,"{$header}\n\nBunday bajaruvchiga biriktirilgan vazifa topilmadi.",['inline_keyboard'=>[
+                [['text'=>'🔍 Qayta qidirish','callback_data'=>'tm:search:given']],
+                [['text'=>'↩️ Barchasi','callback_data'=>'tm:list:given:1']],
+                [['text'=>'⬅️ Menyu','callback_data'=>'tm:home']],
+            ]],'HTML');
+            return;
+        }
+
+        $kb=[];
+        foreach($tasks as $task){
+            $title=mb_strimwidth($task->title,0,22,'…');
+            $deadline=$task->deadline ? TashkentDateTime::short($task->deadline) : '—';
+            $assignee=mb_strimwidth($task->assignee?->full_name?:'—',0,16,'…');
+            $kb[]=[['text'=>"{$task->task_number} · {$assignee} · {$title} · {$deadline}",'callback_data'=>"tm:view:{$task->id}"]];
+        }
+        $nav=[];
+        if($tasks->currentPage()>1) $nav[]=['text'=>'⏮','callback_data'=>'tm:list:given_search:first'];
+        if($tasks->currentPage()>1) $nav[]=['text'=>'⬅️','callback_data'=>'tm:list:given_search:'.($tasks->currentPage()-1)];
+        $nav[]=['text'=>$tasks->currentPage().'/'.$tasks->lastPage(),'callback_data'=>'tm:noop'];
+        if($tasks->hasMorePages()) $nav[]=['text'=>'➡️','callback_data'=>'tm:list:given_search:'.($tasks->currentPage()+1)];
+        if($tasks->currentPage()<$tasks->lastPage()) $nav[]=['text'=>'⏭','callback_data'=>'tm:list:given_search:last'];
+        $kb[]=$nav;
+        $kb[]=[['text'=>'🔍 Qayta qidirish','callback_data'=>'tm:search:given'],['text'=>'↩️ Barchasi','callback_data'=>'tm:list:given:1']];
+        $kb[]=[['text'=>'⬅️ Menyu','callback_data'=>'tm:home']];
+        $this->telegram->sendMessage($chat,"{$header}\n\nVazifani tanlang:",['inline_keyboard'=>$kb],'HTML');
     }
 
     private function view(Staff $staff,int $id,string $cb,int $chat,int $mid): void {

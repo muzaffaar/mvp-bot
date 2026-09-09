@@ -108,64 +108,6 @@ class TaskStatusChangedNotification extends Notification
 
         /*
          * ---------------------------------------------------------
-         * AWAITING_ACCEPTANCE -> ACCEPTED
-         * ---------------------------------------------------------
-         *
-         * The assignor approved the completed task.
-         *
-         * The assignor gets the final "Yopish" button.
-         */
-        if (
-            $this->fromStatus === TaskStatus::AWAITING_ACCEPTANCE
-            && $this->toStatus === TaskStatus::ACCEPTED
-        ) {
-            if ($this->task->assignor_id === $notifiable->id) {
-                return
-                    "📋 <b>Vazifa qabul qilindi</b>\n\n"
-                    . "🔢 <b>Raqam:</b> "
-                    . e($this->task->task_number)
-                    . "\n"
-                    . "📌 <b>Vazifa:</b> "
-                    . e($this->task->title)
-                    . "\n"
-                    . "👤 <b>Bajargan:</b> "
-                    . e($this->task->assignee?->full_name ?? '—')
-                    . "\n\n"
-                    . "Vazifa qabul qilindi. "
-                    . "<b>Yopish</b> tugmasini bosib vazifani yakunlang.";
-            }
-
-            /*
-             * Notify the assignee that the assignor accepted
-             * their completed work.
-             */
-            if ($this->task->assignee_id === $notifiable->id) {
-                return
-                    "📋 <b>Vazifa qabul qilindi</b>\n\n"
-                    . "🔢 <b>Raqam:</b> "
-                    . e($this->task->task_number)
-                    . "\n"
-                    . "📌 <b>Vazifa:</b> "
-                    . e($this->task->title)
-                    . "\n"
-                    . "👤 <b>Qabul qilgan:</b> "
-                    . e($this->actor->full_name);
-            }
-
-            return
-                "📋 <b>Vazifa qabul qilindi</b>\n\n"
-                . "🔢 <b>Raqam:</b> "
-                . e($this->task->task_number)
-                . "\n"
-                . "📌 <b>Vazifa:</b> "
-                . e($this->task->title)
-                . "\n"
-                . "👤 <b>Qabul qilgan:</b> "
-                . e($this->actor->full_name);
-        }
-
-        /*
-         * ---------------------------------------------------------
          * IN_PROGRESS
          * ---------------------------------------------------------
          *
@@ -362,7 +304,7 @@ class TaskStatusChangedNotification extends Notification
             return [
                 'inline_keyboard' => [[
                     [
-                        'text' => '✅ Qabul qilish',
+                        'text' => '✅ Tasdiqlash',
                         'callback_data' =>
                             "task:status:{$this->task->id}:completion_approved",
                     ],
@@ -397,22 +339,6 @@ class TaskStatusChangedNotification extends Notification
                             "task:status:{$this->task->id}:closed",
                     ],
                 ]],
-            ];
-        }
-
-        if (
-            $this->toStatus === TaskStatus::RETURNED
-            && $this->task->assignor_id === $notifiable->id
-            && $this->task->assignee_id !== $notifiable->id
-        ) {
-            return [
-                'inline_keyboard' => [[
-                    [
-                        'text' => '▶️ Ishni boshlash',
-                        'callback_data' =>
-                            "task:status:{$this->task->id}:accepted",
-                    ],
-                ]], 
             ];
         }
 

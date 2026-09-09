@@ -6,7 +6,6 @@ use App\Enums\Permission;
 use App\Enums\TaskStatus;
 use App\Models\Staff;
 use App\Services\Authentication\QrLoginService;
-use App\Telegram\Callbacks\TaskAcceptCallback;
 use App\Telegram\Services\TelegramStaffResolver;
 use App\Telegram\Callbacks\CreateTaskCallback;
 use App\Telegram\Services\TelegramClient;
@@ -22,7 +21,6 @@ class CallbackQueryHandler
     public function __construct(
         private readonly TelegramStaffResolver $staffResolver,
         private readonly AssigneeSelectionCallback $assigneeSelection,
-        private readonly TaskAcceptCallback $taskAccept,
         private readonly CreateTaskCallback $createTask,
         private readonly TelegramClient $telegram,
         private readonly TaskStatusCallback $taskStatus,

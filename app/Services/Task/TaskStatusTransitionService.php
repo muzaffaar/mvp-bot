@@ -213,17 +213,16 @@ class TaskStatusTransitionService
         Staff $actor,
         int $chatId,
     ): bool {
-        // if ($actor->status !== 'active') {
-        //     return false;
-        // }
+        if ($actor->status !== 'active') {
+            return false;
+        }
 
         /*
          * group_chat_id identifies the Telegram group.
          *
          * telegram_chat_id identifies the Telegram user.
          */
-        // return (string) $actor->group_chat_id === (string) $chatId;
-        return $actor->status == 'active';
+        return (string) $actor->group_chat_id === (string) $chatId;
     }
 
     /*
@@ -359,10 +358,14 @@ class TaskStatusTransitionService
          * ASSIGNEE ACTIONS
          * =========================================================
          *
+         * ASSIGNED -> ACCEPTED
          * ACCEPTED -> IN_PROGRESS
          * IN_PROGRESS -> AWAITING_ACCEPTANCE
          */
         $isAssigneeAction = match (true) {
+            $task->status === TaskStatus::ASSIGNED
+                && $newStatus === TaskStatus::ACCEPTED => true,
+
             $task->status === TaskStatus::ACCEPTED
                 && $newStatus === TaskStatus::IN_PROGRESS => true,
 

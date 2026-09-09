@@ -196,11 +196,11 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
                     </div>
 
 
-                    @can('task.create')
+                    {{-- @can('task.create')
                     <button class="kanban-column__add" data-action="open-create-task" type="button">
                         ＋ Qo‘shish
                     </button>
-                    @endcan
+                    @endcan --}}
 
                 </section>
 
@@ -983,8 +983,8 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
                             <p data-task-detail="deadline-label">Muddat belgilanmagan</p><strong
                                 data-task-detail="deadline-value">SLA hisoblanmaydi</strong>
                         </div>
-                        <button class="btn btn--ghost deadline-card__button" type="button">＋2 kun muddat
-                            qo‘shish</button>
+                        {{-- <button class="btn btn--ghost deadline-card__button" type="button">＋2 kun muddat
+                            qo‘shish</button> --}}
                     </section>
                     <dl class="task-detail-list task-detail-list--compact">
                         <div>
@@ -1014,7 +1014,7 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
                             <dd><time data-task-detail="created-at-side"></time></dd>
                         </div>
                     </dl>
-                    <div class="task-detail-actions">
+                    {{-- <div class="task-detail-actions">
                         @can('task.update')
                         <button class="btn btn--primary" data-action="start-task" type="button">Ishni
                             boshlash</button>
@@ -1027,7 +1027,7 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
                         <button class="btn btn--danger" data-action="archive-task" type="button">Topshiriqni
                             arxivlash</button>
                         @endcan
-                    </div>
+                    </div> --}}
                 </aside>
             </div>
         </section>

@@ -113,6 +113,32 @@ class TaskStatusCallback
         }
 
         /*
+         * Qabul qilish (assignment):
+         *
+         * ASSIGNED -> ACCEPTED on a direct task (or an already-claimed
+         * group task) may only be performed by the actual assignee.
+         * An unclaimed GROUP task is a separate case, authorized by
+         * acceptGroupTask()'s own Telegram-chat-membership check.
+         */
+        $isUnclaimedGroupTask =
+            $task->assignment_type === TaskAssignmentType::GROUP
+            && $task->status === TaskStatus::ASSIGNED
+            && $task->assignee_id === null;
+
+        if (
+            $newStatus === TaskStatus::ACCEPTED
+            && ! $isUnclaimedGroupTask
+            && $task->assignee_id !== $staff->id
+        ) {
+            $this->telegram->answerCallbackQuery(
+                $callbackQueryId,
+                '❌ Bu vazifa sizga biriktirilmagan.',
+            );
+
+            return;
+        }
+
+        /*
          * Permission depends on the actual transition, not only
          * the target status.
          */

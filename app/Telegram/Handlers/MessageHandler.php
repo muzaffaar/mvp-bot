@@ -76,6 +76,16 @@ class MessageHandler
             return;
         }
 
+        if ($conversation->state === TelegramConversationState::WAITING_TASK_MANAGEMENT_ASSIGNEE_SEARCH->value) {
+            $text = trim($this->extractText($message));
+            if ($text === '') {
+                $this->telegram->sendMessage($chatId, '❌ Qidiruv uchun xodim ismini yozing.');
+                return;
+            }
+            $this->taskManagement->handleInput($staff, $chatId, $text);
+            return;
+        }
+
         if (
             $conversation->state
             === TelegramConversationState::WAITING_TASK_COMPLETION_COMMENT->value
