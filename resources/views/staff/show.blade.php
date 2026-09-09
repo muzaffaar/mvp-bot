@@ -509,7 +509,7 @@ $tasksData = $tasks->map(fn ($task) => [
         const priority = normalize(task.priority) || 'NORMAL';
         const creator = task.creator?.name || 'Noma’lum';
         const assignee = task.assignee?.name || 'Biriktirilmagan';
-        const due = formatDate(task.dueAt || task.deadline);
+        const due = formatDateTime(task.dueAt || task.deadline);
         const created = formatDate(task.createdAt);
         const sourceText = task.sourceText || task.description || 'Manba xabari mavjud emas.';
 

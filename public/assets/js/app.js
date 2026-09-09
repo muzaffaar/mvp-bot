@@ -1382,7 +1382,7 @@ const dateTargets = [
     [
         '[data-task-detail="due-date"]',
         deadline,
-        formatDate
+        formatDateTime
     ],
 
     [
