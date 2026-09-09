@@ -17,11 +17,19 @@ class AssigneeResolver
      * - Every matching Staff record is returned.
      * - Exact SQL matching is preserved as the first step.
      *
+     * @param int|null $excludeStaffId The staff member requesting the
+     *        assignment (the assignor). Excluded from the results: when
+     *        several staff share a name, the sender is never a valid
+     *        candidate for their own name-based match, so ambiguity
+     *        resolves to the OTHER same-named staff member(s) instead of
+     *        offering "assign to yourself" as one of the choices.
+     *
      * @return Collection<int, Staff>
      */
     public function findCandidates(
         string $name,
         int $chatId,
+        ?int $excludeStaffId = null,
     ): Collection {
         $name = trim($name);
 
@@ -38,6 +46,10 @@ class AssigneeResolver
         $directMatches = Staff::query()
             ->where('status', 'active')
             ->where('group_chat_id', $chatId)
+            ->when(
+                $excludeStaffId !== null,
+                fn ($query) => $query->where('id', '!=', $excludeStaffId),
+            )
             ->where(function ($query) use ($name) {
                 $query
                     ->where('full_name', 'like', "%{$name}%")
@@ -58,6 +70,10 @@ class AssigneeResolver
         $staff = Staff::query()
             ->where('status', 'active')
             ->where('group_chat_id', $chatId)
+            ->when(
+                $excludeStaffId !== null,
+                fn ($query) => $query->where('id', '!=', $excludeStaffId),
+            )
             ->get();
 
         $matches = new Collection();

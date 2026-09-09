@@ -24,6 +24,28 @@ class TaskCreationService
     ): Task {
         $assigneeId = $context['assignee_id'] ?? null;
 
+        /*
+         * A staff member cannot assign a task to themselves. There is no
+         * one left to notify, and self-assigned tasks are indistinguishable
+         * from a personal reminder rather than delegated work. Fall back to
+         * an open/group task instead of silently keeping the self-assignment.
+         */
+        if ($assigneeId && (int) $assigneeId === $creator->id) {
+            Log::info('Refused self-assignment; falling back to group task.', [
+                'staff_id' => $creator->id,
+                'chat_id' => $chatId,
+                'title' => $context['title'] ?? null,
+            ]);
+
+            $assigneeId = null;
+
+            $this->telegram->sendMessage(
+                $chatId,
+                'ℹ️ Vazifani o‘zingizga tayinlab bo‘lmaydi. Vazifa guruhga ochiq sifatida yaratildi.',
+                parseMode: 'HTML',
+            );
+        }
+
         $assignmentType = $assigneeId
             ? 'direct'
             : 'group';

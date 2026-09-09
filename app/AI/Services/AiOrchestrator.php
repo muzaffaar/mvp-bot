@@ -149,6 +149,7 @@ class AiOrchestrator
                     === 'assignee_selection_required'
                 ) {
                     $this->handleAssigneeSelectionRequired(
+                        staff: $staff,
                         chatId: $chatId,
                         conversation: $conversation,
                         result: $result,
@@ -157,11 +158,23 @@ class AiOrchestrator
                     return;
                 }
 
-                // $this->confirmTask(
-                //     conversation: $conversation,
-                //     chatId: $chatId,
-                //     context: $result,
-                // );
+                /*
+                * Assignee was resolved (a single candidate, or the
+                * task was explicitly opened to the whole group) while
+                * replying to the clarification prompt.
+                *
+                * $result is the full task context (title/description/
+                * priority/deadline/etc.) with assignee_id/assignee_name
+                * now filled in, so create the task the same way the
+                * initial new-task flow does. Silently returning here
+                * would drop the task the admin already provided.
+                */
+                $this->createTask(
+                    staff: $staff,
+                    conversation: $conversation,
+                    chatId: $chatId,
+                    context: $result,
+                );
 
                 return;
             }
@@ -313,7 +326,45 @@ class AiOrchestrator
                     $chatId,
                     'ℹ️ Bu xabar vazifaga bog‘landi, lekin aniq o‘zgarish aniqlanmadi.',
                 );
+            } else {
+                /*
+                * A non-reply message was recognized as plausibly targeting an
+                * existing task, but either the target task could not be
+                * resolved or confidence did not clear the threshold. Previously
+                * this was dropped with zero feedback, so a real follow-up
+                * instruction could silently vanish with no way for the sender
+                * to know it was not applied.
+                */
+                Log::info('Non-reply update_task did not meet confidence threshold; not applied.', [
+                    'chat_id' => $chatId,
+                    'message_id' => $message['message_id'] ?? null,
+                    'target_task_id' => $result['target_task_id'] ?? null,
+                    'confidence' => $result['confidence'] ?? null,
+                    'threshold' => $threshold,
+                ]);
+
+                $this->telegram->sendMessage(
+                    $chatId,
+                    'ℹ️ Bu xabar biror vazifaga tegishli bo‘lishi mumkin, lekin qaysi vazifaga tegishli ekanini aniq bila olmadim. '
+                    . 'Iltimos, tegishli vazifa xabariga javob (reply) tarzida yuboring.',
+                );
             }
+
+            return;
+        }
+
+        if ($action === 'ambiguous') {
+            Log::info('Message classified as ambiguous task relation.', [
+                'chat_id' => $chatId,
+                'message_id' => $message['message_id'] ?? null,
+                'confidence' => $result['confidence'] ?? null,
+            ]);
+
+            $this->telegram->sendMessage(
+                $chatId,
+                'ℹ️ Bu xabar biror vazifaga tegishli bo‘lishi mumkin, lekin qaysi vazifaga tegishli ekanini aniq bila olmadim. '
+                . 'Iltimos, tegishli vazifa xabariga javob (reply) tarzida yuboring.',
+            );
 
             return;
         }
@@ -411,6 +462,7 @@ class AiOrchestrator
             $candidates = $this->assigneeResolver->findCandidates(
                 name: $assigneeName,
                 chatId: $chatId,
+                excludeStaffId: $staff->id,
             );
 
             /*
@@ -465,6 +517,7 @@ class AiOrchestrator
             */
             if ($candidates->count() > 1) {
                 $this->handleAssigneeSelectionRequired(
+                    staff: $staff,
                     chatId: $chatId,
                     conversation: $conversation,
                     result: [
@@ -657,6 +710,7 @@ private function createTask(
     }
 
     private function handleAssigneeSelectionRequired(
+        Staff $staff,
         int $chatId,
         TelegramConversation $conversation,
         array $result,
@@ -683,6 +737,17 @@ private function createTask(
                         (int) $candidate['id'],
                     $candidates,
                 ),
+
+            /*
+             * The conversation row is keyed by Telegram chat, not by
+             * staff, so a group with more than one admin shares a
+             * single pending selection. Record who triggered it so a
+             * different admin's button click (or a later message that
+             * re-enters this same state for an unrelated task) can
+             * never be applied on top of this one.
+             */
+            'requested_by_staff_id' =>
+                $staff->id,
         ];
 
         $this->conversationService->update(

@@ -100,6 +100,7 @@ class TaskClarificationService
         $candidates = $this->assigneeResolver->findCandidates(
             name: $assigneeName,
             chatId: $chatId,
+            excludeStaffId: $staff->id,
         );
 
         // if assignee not found then it is group task

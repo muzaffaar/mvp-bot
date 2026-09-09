@@ -6,6 +6,7 @@ use App\AI\Services\ConversationService;
 use App\Enums\Permission;
 use App\Models\Staff;
 use App\Models\Task;
+use App\Services\Task\Context\TaskMessageLinkService;
 use App\Services\Task\TaskCreationService;
 use App\Telegram\Enums\ConversationState;
 use App\Telegram\Services\TelegramClient;
@@ -18,6 +19,7 @@ class AssigneeSelectionCallback
         private readonly ConversationService $conversationService,
         private readonly TelegramClient $telegram,
         private readonly TaskCreationService $taskCreationService,
+        private readonly TaskMessageLinkService $messageLinks,
     ) {
     }
 
@@ -61,6 +63,29 @@ class AssigneeSelectionCallback
         $context = $this->conversationService->context(
             $conversation,
         );
+
+        /*
+         * The conversation row is keyed by Telegram chat, not by staff,
+         * so a group with more than one admin shares a single pending
+         * selection. If another admin's message has since started a
+         * different pending selection (or this one was never theirs),
+         * reject the click instead of silently applying the wrong
+         * staff member to a task context that isn't this admin's.
+         */
+        $requestedByStaffId = $context['assignee_selection']['requested_by_staff_id']
+            ?? null;
+
+        if (
+            $requestedByStaffId !== null
+            && (int) $requestedByStaffId !== $staff->id
+        ) {
+            $this->telegram->answerCallbackQuery(
+                $callbackQueryId,
+                'Bu tanlov boshqa foydalanuvchi uchun yaratilgan.',
+            );
+
+            return;
+        }
 
         /*
          * Only allow selecting a staff member that was actually
@@ -120,6 +145,23 @@ class AssigneeSelectionCallback
         );
 
         /*
+         * Link the original request message and the confirmation message
+         * to this task, the same way AiOrchestrator::createTask() does for
+         * the non-ambiguous path. Without these links, TaskCandidateFinder
+         * can never surface this task for follow-up messages sent in this
+         * chat, since it depends entirely on task_telegram_messages rows.
+         */
+        if (! empty($context['source_message_id'])) {
+            $this->messageLinks->link(
+                $task,
+                $chatId,
+                (int) $context['source_message_id'],
+                $staff,
+                'original',
+            );
+        }
+
+        /*
          * Move conversation to confirmation.
          */
         // $this->conversationService->update(
@@ -172,11 +214,21 @@ class AssigneeSelectionCallback
         //     parseMode: 'HTML',
         // );
 
-        $this->telegram->sendMessage(
+        $response = $this->telegram->sendMessage(
             $chatId,
             $this->formatTaskCreatedMessage($task),
             parseMode: 'HTML',
         );
+
+        if (isset($response['result']['message_id'])) {
+            $this->messageLinks->link(
+                $task,
+                $chatId,
+                (int) $response['result']['message_id'],
+                null,
+                'task_created_notification',
+            );
+        }
 
         $this->telegram->answerCallbackQuery(
             $callbackQueryId,
