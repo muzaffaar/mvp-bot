@@ -151,6 +151,28 @@ class QrLoginController extends Controller
         }
 
         /*
+         * Being an active staff member is not enough on its own —
+         * the account must also hold a role with panel access
+         * (e.g. `executor` is a Telegram-only role by design).
+         *
+         * This mirrors the same gate enforced by the password
+         * login flow (LoginController::login()).
+         */
+        if (! $staff->can('dashboard.view')) {
+            SecurityLog::record(
+                eventType: SecurityLogEventType::LOGIN_FAILED,
+                staffId: $staff->id,
+                description: 'QR: Boshqaruv paneliga kirish huquqi yo\'q.',
+                ipAddress: $request->ip(),
+                userAgent: $request->userAgent(),
+            );
+
+            return response()->json([
+                'message' => 'Sizning rolingiz boshqaruv paneliga kirish huquqiga ega emas.',
+            ], 403);
+        }
+
+        /*
          * Authenticate Laravel session.
          */
         Auth::login($staff);

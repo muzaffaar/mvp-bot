@@ -10,7 +10,7 @@ class UpdateSprintRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('tasks.update') ?? false;
+        return $this->user()?->can('task.update') ?? false;
     }
 
     public function rules(): array

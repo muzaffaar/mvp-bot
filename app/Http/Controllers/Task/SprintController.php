@@ -70,7 +70,7 @@ class SprintController extends Controller
         Task $task
     ): JsonResponse {
         abort_unless(
-            request()->user()?->can('tasks.update'),
+            request()->user()?->can('task.update'),
             403
         );
 
@@ -89,7 +89,7 @@ class SprintController extends Controller
         Task $task
     ): JsonResponse {
         abort_unless(
-            request()->user()?->can('tasks.update'),
+            request()->user()?->can('task.update'),
             403
         );
 
@@ -107,7 +107,7 @@ class SprintController extends Controller
         Sprint $sprint
     ): JsonResponse {
         abort_unless(
-            request()->user()?->can('tasks.delete'),
+            request()->user()?->can('task.delete'),
             403
         );
 

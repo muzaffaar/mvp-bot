@@ -344,7 +344,7 @@ class TaskController extends Controller
                 $request->input('status')
             ),
             actor: $actor,
-            comment: $request->input('comment'),
+            message: $request->input('comment'),
         );
 
         return response()->json([
@@ -358,7 +358,7 @@ class TaskController extends Controller
         Task $task
     ): JsonResponse {
         abort_unless(
-            $request->user()?->can('tasks.delete'),
+            $request->user()?->can('task.archive'),
             403
         );
 
@@ -379,6 +379,11 @@ class TaskController extends Controller
         Request $request,
         Task $task
     ): JsonResponse {
+        abort_unless(
+            $request->user()?->can('task.accept'),
+            403
+        );
+
         /** @var Staff $staff */
         $staff = $request->user();
 

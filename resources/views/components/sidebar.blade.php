@@ -38,6 +38,7 @@
     <nav aria-label="Ish maydoni" class="app-nav">
 
         {{-- Dashboard --}}
+        @can('dashboard.view')
         <a
             class="app-nav__link {{ $page === 'dashboard' ? 'is-active' : '' }}"
             href="{{ route('dashboard') }}"
@@ -52,9 +53,11 @@
             </span>
 
         </a>
+        @endcan
 
 
         {{-- Tasks --}}
+        @can('task.view')
         <a
             class="app-nav__link {{ $page === 'tasks' ? 'is-active' : '' }}"
             href="{{ route('tasks.index') }}"
@@ -75,9 +78,11 @@
             </b>
 
         </a>
+        @endcan
 
 
         {{-- Chain --}}
+        @can('task.view')
         <a
             class="app-nav__link {{ $page === 'chain' ? 'is-active' : '' }}"
             href="{{ route('chain.index') }}"
@@ -92,9 +97,11 @@
             </span>
 
         </a>
+        @endcan
 
 
         {{-- Staff --}}
+        @can('staff.view')
         <a
             class="app-nav__link {{ $page === 'people' ? 'is-active' : '' }}"
             href="{{ route('staff.index') }}"
@@ -109,9 +116,11 @@
             </span>
 
         </a>
+        @endcan
 
 
         {{-- Reports --}}
+        @can('statistics.view')
         <a
             class="app-nav__link {{ $page === 'reports' ? 'is-active' : '' }}"
             href="{{ route('reports.index') }}"
@@ -126,6 +135,7 @@
             </span>
 
         </a>
+        @endcan
 
 
         {{-- Security --}}

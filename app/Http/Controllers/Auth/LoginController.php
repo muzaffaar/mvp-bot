@@ -45,11 +45,40 @@ class LoginController extends Controller
                 ]);
         }
 
+        /** @var Staff $staff */
+        $staff = Auth::user();
+
+        /*
+         * Being an active staff member is not enough on its own —
+         * the account must also hold a role with panel access
+         * (e.g. `executor` is a Telegram-only role by design).
+         */
+        if (! $staff->can('dashboard.view')) {
+            SecurityLog::record(
+                eventType: SecurityLogEventType::LOGIN_FAILED,
+                staffId: $staff->id,
+                description: 'Boshqaruv paneliga kirish huquqi yo\'q.',
+                ipAddress: $request->ip(),
+                userAgent: $request->userAgent(),
+            );
+
+            Auth::logout();
+
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()
+                ->withInput($request->only('login'))
+                ->withErrors([
+                    'login' => 'Sizning rolingiz boshqaruv paneliga kirish huquqiga ega emas.',
+                ]);
+        }
+
         $request->session()->regenerate();
 
         SecurityLog::record(
             eventType: SecurityLogEventType::LOGIN_SUCCESS,
-            staffId: Auth::id(),
+            staffId: $staff->id,
             ipAddress: $request->ip(),
             userAgent: $request->userAgent(),
         );

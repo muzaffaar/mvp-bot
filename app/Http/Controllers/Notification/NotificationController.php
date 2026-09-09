@@ -39,7 +39,10 @@ class NotificationController extends Controller
 
         $item->markAsRead();
 
-        return back();
+        return response()->json([
+            'message' => 'Bildirishnoma o\'qilgan deb belgilandi.',
+            'unread_count' => $staff->unreadNotifications()->count(),
+        ]);
     }
 
     /**
@@ -47,10 +50,13 @@ class NotificationController extends Controller
      */
     public function readAll(Request $request)
     {
-        $request->user()
-            ->unreadNotifications
-            ->markAsRead();
+        $staff = $request->user();
 
-        return back();
+        $staff->unreadNotifications->markAsRead();
+
+        return response()->json([
+            'message' => 'Barcha bildirishnomalar o\'qilgan deb belgilandi.',
+            'unread_count' => 0,
+        ]);
     }
 }

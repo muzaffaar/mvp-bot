@@ -2,17 +2,21 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\Role;
-use App\Enums\TaskPriority;
 use App\Enums\TaskSourceType;
 use App\Enums\TaskStatus;
 use App\Models\Staff;
 use App\Models\Task;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    /**
+     * Business-rule norm for how many active tasks a single staff
+     * member is expected to carry. Not backed by a DB column — there
+     * is no per-staff capacity setting in this app yet.
+     */
+    private const WORKLOAD_CAPACITY = 8;
+
     public function index(Request $request)
     {
         /** @var Staff $staff */
@@ -44,55 +48,8 @@ class DashboardController extends Controller
         */
 
         $groupMembers = Staff::query()
-            ->with([
-                'roles',
-                'aliases',
-            ])
             ->orderBy('full_name')
             ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | Logical groups
-        |--------------------------------------------------------------------------
-        |
-        | There is no Group model anymore.
-        |
-        | Groups are represented by:
-        |   staff.group_chat_id
-        |   staff.group_name
-        |
-        | Build unique logical groups from Staff records.
-        |
-        */
-
-        $groups = $groupMembers
-            ->filter(
-                fn (Staff $member) =>
-                    $member->group_chat_id !== null
-            )
-            ->groupBy(
-                fn (Staff $member) =>
-                    (string) $member->group_chat_id
-            )
-            ->map(
-                function ($members, string $chatId) {
-                    /** @var Staff $firstMember */
-                    $firstMember = $members->first();
-
-                    return [
-                        'id' => $chatId,
-
-                        'name' => $firstMember->group_name
-                            ?: 'Unnamed Group',
-
-                        'chat_id' => $chatId,
-
-                        'staff' => $members->values(),
-                    ];
-                }
-            )
-            ->values();
 
         /*
         |--------------------------------------------------------------------------
@@ -103,18 +60,19 @@ class DashboardController extends Controller
         |
         | Dashboard permission grants access to the dashboard dataset.
         |
+        | Only `assignee` (shown in the attention-card lists), `logs`
+        | (status/event checks) and `comments` (today's-comment count)
+        | are eager-loaded here — buildStatistics() never touches
+        | author/assignor/sprints or the nested comment/log relations,
+        | so loading them would only add unused query weight.
+        |
         */
 
         $tasks = Task::query()
             ->with([
-                'author',
-                'assignor',
                 'assignee',
-                'logs.actor',
-                'logs.fromAssignee',
-                'logs.toAssignee',
-                'comments.staff',
-                'sprints',
+                'logs',
+                'comments',
             ])
             ->latest()
             ->get();
@@ -124,202 +82,9 @@ class DashboardController extends Controller
             $groupMembers
         );
 
-        /*
-        |--------------------------------------------------------------------------
-        | Dashboard members
-        |--------------------------------------------------------------------------
-        */
-
-        $members = $groupMembers
-            ->unique('id')
-            ->map(function (Staff $member) {
-                $role = $this->resolveStaffRole($member);
-
-                return [
-                    'id' => $member->group_chat_id !== null
-                        ? $member->group_chat_id . ':' . $member->id
-                        : (string) $member->id,
-
-                    'personId' => (string) $member->id,
-
-                    'groupId' => $member->group_chat_id !== null
-                        ? (string) $member->group_chat_id
-                        : null,
-
-                    'role' => $this->dashboardRole($role),
-
-                    'active' => strtolower(
-                        (string) $member->status
-                    ) === 'active',
-
-                    'joined' => $member->created_at
-                        ? Carbon::parse(
-                            $member->created_at
-                        )->toISOString()
-                        : null,
-                ];
-            })
-            ->values();
-
-        /*
-        |--------------------------------------------------------------------------
-        | Persons
-        |--------------------------------------------------------------------------
-        */
-
-        $personIds = $members
-            ->pluck('personId')
-            ->unique()
-            ->values();
-
-        $persons = Staff::query()
-            ->whereIn('id', $personIds)
-            ->with('aliases')
-            ->get()
-            ->map(fn (Staff $person) => [
-                'id' => (string) $person->id,
-
-                'fullName' => $person->full_name,
-
-                'username' => $person->username,
-
-                'tgId' => $person->telegram_chat_id,
-
-                'aliases' => $person->aliases
-                    ->pluck('alias')
-                    ->values(),
-
-                'post' => $person->lavozim,
-
-                'systemUser' => $person->can('dashboard.view'),
-
-                'status' => strtoupper(
-                    (string) $person->status
-                ),
-
-                'mergedInto' => null,
-
-                'firstSeen' => $person->created_at?->toDateString(),
-            ])
-            ->values();
-
-        /*
-        |--------------------------------------------------------------------------
-        | Dashboard JS data
-        |--------------------------------------------------------------------------
-        */
-
-        $data = [
-            'authenticated' => true,
-
-            'me' => (string) $staff->id,
-
-            'groups' => $groups
-                ->map(fn (array $group) => [
-                    'id' => (string) $group['id'],
-
-                    'title' => $group['name'],
-
-                    'tgChatId' => (string) $group['chat_id'],
-
-                    'tz' => config(
-                        'app.timezone',
-                        'Asia/Tashkent'
-                    ),
-                ])
-                ->values(),
-
-            'persons' => $persons,
-
-            'members' => $members,
-
-            'tasks' => $tasks
-                ->map(
-                    fn (Task $task) =>
-                        $this->taskPayload($task)
-                )
-                ->values(),
-
-            'events' => $tasks
-                ->flatMap(
-                    fn (Task $task) =>
-                        $task->logs->map(
-                            fn ($log) => [
-                                'id' => (string) $log->id,
-
-                                'taskId' => (string) $task->id,
-
-                                'type' => strtoupper(
-                                    $log->event_type?->value
-                                    ?? (string) $log->event_type
-                                ),
-
-                                'actorId' => $log->actor_id
-                                    ? (string) $log->actor_id
-                                    : null,
-
-                                'actorKind' => 'USER',
-
-                                'channel' => 'WEB',
-
-                                'from' => $log->from_status?->value,
-
-                                'to' => $log->to_status?->value,
-
-                                'text' => $log->message ?? '',
-
-                                'at' => $log->created_at
-                                    ?->toISOString(),
-                            ]
-                        )
-                )
-                ->values(),
-
-            'comments' => $tasks
-                ->flatMap(
-                    fn (Task $task) =>
-                        $task->comments->map(
-                            fn ($comment) => [
-                                'id' => (string) $comment->id,
-
-                                'taskId' => (string) $task->id,
-
-                                'personId' => (string) $comment->staff_id,
-
-                                'text' => $comment->body,
-
-                                'at' => $comment->created_at
-                                    ?->toISOString(),
-                            ]
-                        )
-                )
-                ->values(),
-
-            'notifications' => [],
-
-            'audit' => [],
-
-            'sessions' => [],
-
-            'links' => [],
-        ];
-
-        /*
-        |--------------------------------------------------------------------------
-        | View
-        |--------------------------------------------------------------------------
-        |
-        | No sidebarGroups are passed because the sidebar no longer has
-        | a group selector/dropdown.
-        |
-        */
-
         return view(
             'dashboard.index',
-            compact(
-                'data',
-                'stats'
-            )
+            compact('stats')
         );
     }
 
@@ -404,13 +169,21 @@ class DashboardController extends Controller
                     return null;
                 }
 
+                /*
+                 * Signed diff (absolute = false): a negative value means
+                 * completed_at is before the start timestamp, which is
+                 * corrupt data that must be excluded, not silently
+                 * flipped positive and left to pollute the median.
+                 */
                 return $start->diffInMinutes(
-                    $task->completed_at
+                    $task->completed_at,
+                    false
                 );
             })
             ->filter(
                 fn ($minutes) =>
                     $minutes !== null
+                    && $minutes >= 0
             )
             ->sort()
             ->values();
@@ -679,7 +452,7 @@ class DashboardController extends Controller
 
                         'load' => $count,
 
-                        'capacity' => 8,
+                        'capacity' => self::WORKLOAD_CAPACITY,
                     ];
                 }
             )
@@ -796,7 +569,8 @@ class DashboardController extends Controller
                 fn (Task $task) =>
                     $task->created_at
                         ->diffInMinutes(
-                            $task->started_at
+                            $task->started_at,
+                            false
                         )
             )
             ->filter(
@@ -811,6 +585,40 @@ class DashboardController extends Controller
             )
             : 0;
 
+        /*
+        |--------------------------------------------------------------------------
+        | Automation accuracy
+        |--------------------------------------------------------------------------
+        |
+        | Real average of the AI-extracted confidence score
+        | (ajralish_aniqligi) across every task that has one, instead of
+        | a hardcoded placeholder. Null when no task has this data yet,
+        | so the UI can show "no data" rather than a fake percentage.
+        */
+
+        $confidenceScores = $tasks
+            ->pluck('ajralish_aniqligi')
+            ->filter(fn ($value) => $value !== null);
+
+        $automationAccuracy = $confidenceScores->isNotEmpty()
+            ? (int) round($confidenceScores->avg())
+            : null;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Telegram integration activity
+        |--------------------------------------------------------------------------
+        |
+        | Real signal instead of a hardcoded "true": has ANY task actually
+        | arrived through Telegram in the last 24 hours.
+        */
+
+        $telegramActive = $tasks->contains(
+            fn (Task $task) =>
+                $task->source_message_id !== null
+                && $task->created_at !== null
+                && $task->created_at->gte($now->copy()->subDay())
+        );
 
         /*
         |--------------------------------------------------------------------------
@@ -911,14 +719,9 @@ class DashboardController extends Controller
 
             'quick_status' => [
 
-                /*
-                * You can later connect this to
-                * actual Telegram health monitoring.
-                */
+                'telegram_active' => $telegramActive,
 
-                'telegram_active' => true,
-
-                'automation_accuracy' => 94,
+                'automation_accuracy' => $automationAccuracy,
 
                 'needs_review' =>
                     $waitingAcceptance->count(),
@@ -947,6 +750,8 @@ class DashboardController extends Controller
             'deadline' => $task->deadline?->toISOString(),
 
             'assignee' => $task->assignee?->full_name,
+
+            'created_at' => $task->created_at?->toISOString(),
         ];
     }
 
@@ -976,273 +781,5 @@ class DashboardController extends Controller
         }
 
         return $values[$middle];
-    }
-
-    private function taskPayload(Task $task): array
-    {
-        $metadata = is_array($task->metadata)
-            ? $task->metadata
-            : [];
-
-        $sourceType = $task->source_type;
-
-        if (!$sourceType instanceof TaskSourceType) {
-            $sourceType = TaskSourceType::tryFrom(
-                strtolower((string) $sourceType)
-            );
-        }
-
-        return [
-            'id' => (string) $task->id,
-
-            'number' => $task->task_number,
-
-            /*
-             * group_id represents the Telegram group chat ID.
-             */
-            'groupId' => $task->group_id !== null
-                ? (string) $task->group_id
-                : null,
-
-            'title' => $task->title,
-
-            'description' => $task->description ?? '',
-
-            'type' => 'TASK',
-
-            'status' => $this->dashboardStatus(
-                $task->status
-            ),
-
-            'priority' => $this->dashboardPriority(
-                $task->priority
-            ),
-
-            'assigneeId' => $task->assignee_id
-                ? (string) $task->assignee_id
-                : null,
-
-            'guessed' => false,
-
-            'confidence' => $task->ajralish_aniqligi !== null
-                ? (float) $task->ajralish_aniqligi
-                : null,
-
-            'createdBy' => $task->author_id
-                ? (string) $task->author_id
-                : null,
-
-            'createdAt' => $task->created_at?->toISOString(),
-
-            'deadline' => $task->deadline?->toISOString(),
-
-            'startedAt' => $task->started_at?->toISOString(),
-
-            'submittedAt' => data_get(
-                $metadata,
-                'submitted_at'
-            ),
-
-            'acceptedAt' => data_get(
-                $metadata,
-                'accepted_at'
-            ),
-
-            'closedAt' => $task->closed_at?->toISOString(),
-
-            'pausedMs' => (int) data_get(
-                $metadata,
-                'paused_ms',
-                0
-            ),
-
-            'reworks' => (int) data_get(
-                $metadata,
-                'reworks',
-                0
-            ),
-
-            'parentId' => data_get(
-                $metadata,
-                'parent_id'
-            ),
-
-            'checklist' => data_get(
-                $metadata,
-                'checklist',
-                []
-            ),
-
-            'watchers' => data_get(
-                $metadata,
-                'watchers',
-                []
-            ),
-
-            'attachments' => data_get(
-                $metadata,
-                'attachments',
-                []
-            ),
-
-            'archived' => (bool) data_get(
-                $metadata,
-                'archived',
-                false
-            ),
-
-            'source' => [
-                'kind' => $this->dashboardSource(
-                    $sourceType,
-                    $task->source_message_id !== null
-                ),
-
-                'text' => $task->description
-                    ?: $task->title,
-
-                'tgMsgId' => $task->source_message_id,
-
-                'transcript' => data_get(
-                    $metadata,
-                    'transcript'
-                ),
-
-                'conf' => $task->ajralish_aniqligi !== null
-                    ? (float) $task->ajralish_aniqligi / 100
-                    : null,
-            ],
-        ];
-    }
-
-    private function dashboardStatus(
-        ?TaskStatus $status
-    ): string {
-        return match ($status) {
-            TaskStatus::CREATED =>
-                'NEW',
-
-            TaskStatus::ASSIGNED =>
-                'ASSIGNED',
-
-            TaskStatus::IN_PROGRESS =>
-                'IN_PROGRESS',
-
-            TaskStatus::AWAITING_ACCEPTANCE =>
-                'SUBMITTED',
-
-            TaskStatus::ACCEPTED,
-            TaskStatus::COMPLETION_APPROVED =>
-                'ACCEPTED',
-
-            TaskStatus::CLOSED =>
-                'CLOSED',
-
-            TaskStatus::CANCELLED =>
-                'CANCELLED',
-
-            TaskStatus::RETURNED =>
-                'IN_PROGRESS',
-
-            default =>
-                'NEW',
-        };
-    }
-
-    private function dashboardPriority(
-        ?TaskPriority $priority
-    ): string {
-        return match ($priority) {
-            TaskPriority::LOW =>
-                'LOW',
-
-            TaskPriority::NORMAL =>
-                'NORMAL',
-
-            TaskPriority::HIGH =>
-                'HIGH',
-
-            TaskPriority::URGENT =>
-                'CRITICAL',
-
-            default =>
-                'NORMAL',
-        };
-    }
-
-    private function dashboardSource(
-        ?TaskSourceType $sourceType,
-        bool $isTelegram
-    ): string {
-        if (!$isTelegram) {
-            return 'MANUAL';
-        }
-
-        return match ($sourceType) {
-            TaskSourceType::TEXT =>
-                'TEXT',
-
-            TaskSourceType::VOICE,
-            TaskSourceType::AUDIO =>
-                'VOICE',
-
-            TaskSourceType::FILE,
-            TaskSourceType::PHOTO,
-            TaskSourceType::VIDEO =>
-                'DOCUMENT',
-
-            default =>
-                'MANUAL',
-        };
-    }
-
-    /**
-     * Resolve the Staff's actual role.
-     */
-    private function resolveStaffRole(Staff $staff): ?string
-    {
-        $roles = $staff->roles;
-
-        foreach ([
-            Role::SuperAdmin->value,
-            Role::Head->value,
-            Role::Executor->value,
-            Role::Observer->value,
-            Role::Auditor->value,
-        ] as $role) {
-            if (
-                $roles->contains(
-                    fn ($item) =>
-                        $item->name === $role
-                        || $item->value === $role
-                )
-            ) {
-                return $role;
-            }
-        }
-
-        return null;
-    }
-
-    private function dashboardRole(?string $role): ?string
-    {
-        return match ($role) {
-            Role::SuperAdmin->value =>
-                'ORG_ADMIN',
-
-            Role::Head->value =>
-                'HEAD',
-
-            Role::Executor->value =>
-                'EXECUTOR',
-
-            Role::Observer->value =>
-                'OBSERVER',
-
-            Role::Auditor->value =>
-                'AUDITOR',
-
-            default =>
-                null,
-        };
     }
 }

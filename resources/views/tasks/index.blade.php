@@ -196,9 +196,11 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
                     </div>
 
 
-                    {{-- <button class="kanban-column__add" data-action="open-create-task" type="button">
+                    @can('task.create')
+                    <button class="kanban-column__add" data-action="open-create-task" type="button">
                         ＋ Qo‘shish
-                    </button> --}}
+                    </button>
+                    @endcan
 
                 </section>
 
@@ -1012,14 +1014,20 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
                             <dd><time data-task-detail="created-at-side"></time></dd>
                         </div>
                     </dl>
-                    {{-- <div class="task-detail-actions">
+                    <div class="task-detail-actions">
+                        @can('task.update')
                         <button class="btn btn--primary" data-action="start-task" type="button">Ishni
                             boshlash</button>
+                        @endcan
+                        @can('task.cancel')
                         <button class="btn btn--ghost" data-action="cancel-assignment" type="button">Biriktirishni
                             bekor qilish</button>
+                        @endcan
+                        @can('task.archive')
                         <button class="btn btn--danger" data-action="archive-task" type="button">Topshiriqni
                             arxivlash</button>
-                    </div> --}}
+                        @endcan
+                    </div>
                 </aside>
             </div>
         </section>
@@ -1053,6 +1061,55 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
         </section>
     </div>
 </aside>
+@can('task.create')
+<div class="modal-backdrop" hidden id="create-task-modal">
+    <section aria-labelledby="create-task-modal-title" aria-modal="true" class="person-profile-modal card" role="dialog">
+        <header class="person-profile-modal__header">
+            <h2 id="create-task-modal-title">Yangi topshiriq</h2>
+            <button aria-label="Yopish" class="modal-close" data-action="close-create-task" type="button">×</button>
+        </header>
+        <form id="create-task-form">
+            <div class="person-profile-modal__body">
+                <div class="form-error-list" hidden id="create-task-errors"></div>
+                <label class="field">
+                    <span>Sarlavha</span>
+                    <input id="create-task-title" maxlength="500" name="title" required type="text">
+                </label>
+                <label class="field">
+                    <span>Tavsif</span>
+                    <textarea id="create-task-description" name="description" rows="3"></textarea>
+                </label>
+                <label class="field">
+                    <span>Ijrochi</span>
+                    <select id="create-task-assignee" name="assignee_id" required>
+                        <option disabled selected value="">Ijrochini tanlang</option>
+                        @foreach ($staff as $person)
+                        <option value="{{ $person->id }}">{{ $person->full_name }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label class="field">
+                    <span>Ustuvorlik</span>
+                    <select id="create-task-priority" name="priority">
+                        <option value="low">Past</option>
+                        <option selected value="normal">Oddiy</option>
+                        <option value="high">Yuqori</option>
+                        <option value="urgent">Juda yuqori</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>Muddat</span>
+                    <input id="create-task-deadline" name="deadline" type="datetime-local">
+                </label>
+            </div>
+            <footer class="person-profile-modal__footer">
+                <button class="btn btn--ghost" data-action="close-create-task" type="button">Bekor qilish</button>
+                <button class="btn btn--primary" type="submit">Yaratish</button>
+            </footer>
+        </form>
+    </section>
+</div>
+@endcan
 <template id="task-card-template">
     <article class="task-card" data-task-id="" role="button" tabindex="0">
         <header class="task-card__meta"><span class="task-card__number" data-task-field="number"></span><button

@@ -8,7 +8,7 @@ class AssignTaskRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('tasks.assign') ?? false;
+        return $this->user()?->can('task.assign') ?? false;
     }
 
     public function rules(): array

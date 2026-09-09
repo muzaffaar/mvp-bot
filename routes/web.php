@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Auth\QrLoginController;
 use App\Http\Controllers\Group\GroupController;
 use App\Http\Controllers\Notification\NotificationController;
+use App\Http\Controllers\Report\ReportsController;
 use App\Http\Controllers\Security\SecurityController;
 use App\Http\Controllers\Staff\StaffController;
 use App\Http\Controllers\Task\SprintController;
@@ -80,7 +81,9 @@ Route::middleware('auth')->group(function () {
     Route::get(
         '/dashboard',
         [DashboardController::class, 'index']
-    )->name('dashboard');
+    )
+        ->name('dashboard')
+        ->middleware('can:dashboard.view');
 
 
     /*
@@ -127,7 +130,11 @@ Route::middleware('auth')->group(function () {
     Route::resource(
         'staff',
         StaffController::class
-    );
+    )
+        ->middlewareFor(['index', 'show'], 'can:staff.view')
+        ->middlewareFor(['create', 'store'], 'can:staff.create')
+        ->middlewareFor(['edit', 'update'], 'can:staff.update')
+        ->middlewareFor('destroy', 'can:staff.delete');
 
     Route::post(
         '/staff/{staff}/regenerate-token',
@@ -156,7 +163,9 @@ Route::middleware('auth')->group(function () {
             Route::get(
                 '/',
                 [TaskController::class, 'index']
-            )->name('index');
+            )
+                ->name('index')
+                ->middleware('can:task.view');
 
             Route::post(
                 '/',
@@ -166,7 +175,9 @@ Route::middleware('auth')->group(function () {
             Route::get(
                 '/{task}',
                 [TaskController::class, 'show']
-            )->name('show');
+            )
+                ->name('show')
+                ->middleware('can:task.view');
 
             Route::put(
                 '/{task}',
@@ -203,7 +214,9 @@ Route::middleware('auth')->group(function () {
             Route::post(
                 '/{task}/accept',
                 [TaskController::class, 'accept']
-            )->name('accept');
+            )
+                ->name('accept')
+                ->middleware('can:task.accept');
 
 
             /*
@@ -215,7 +228,9 @@ Route::middleware('auth')->group(function () {
             Route::get(
                 '/{task}/comments',
                 [TaskCommentController::class, 'index']
-            )->name('comments.index');
+            )
+                ->name('comments.index')
+                ->middleware('can:task.view');
 
             Route::post(
                 '/{task}/comments',
@@ -257,7 +272,9 @@ Route::middleware('auth')->group(function () {
             Route::get(
                 '/',
                 [SprintController::class, 'index']
-            )->name('index');
+            )
+                ->name('index')
+                ->middleware('can:task.view');
 
             Route::post(
                 '/',
@@ -267,7 +284,9 @@ Route::middleware('auth')->group(function () {
             Route::get(
                 '/{sprint}',
                 [SprintController::class, 'show']
-            )->name('show');
+            )
+                ->name('show')
+                ->middleware('can:task.view');
 
             Route::put(
                 '/{sprint}',
@@ -316,6 +335,14 @@ Route::middleware('auth')->group(function () {
             )->name('sessions.destroy');
         });
 
-    Route::get('chain', fn () => view('chain.index'))->name('chain.index');
-    Route::get('reports', fn () => view('reports.index'))->name('reports.index');
+    Route::get('chain', fn () => view('chain.index'))
+        ->name('chain.index')
+        ->middleware('can:task.view');
+
+    Route::get(
+        'reports',
+        [ReportsController::class, 'index']
+    )
+        ->name('reports.index')
+        ->middleware('can:statistics.view');
 });

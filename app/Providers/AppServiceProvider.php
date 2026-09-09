@@ -7,6 +7,7 @@ use App\Events\TaskChanged;
 use App\Listeners\SendTaskStatusChangedNotification;
 use App\Listeners\SendTaskChangedNotification;
 use App\Models\Task;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
@@ -31,6 +32,20 @@ class AppServiceProvider extends ServiceProvider
     {
         config(['app.timezone' => TashkentDateTime::TIMEZONE]);
         date_default_timezone_set(TashkentDateTime::TIMEZONE);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Locale
+        |--------------------------------------------------------------------------
+        |
+        | The whole admin panel UI is Uzbek (Latin script). Carbon's
+        | human-readable diffs (diffForHumans()) must match, otherwise
+        | English strings ("3 hours ago") leak into an otherwise fully
+        | Uzbek page.
+        */
+
+        Carbon::setLocale('uz_Latn');
+
         /*
         |--------------------------------------------------------------------------
         | Super Admin Gate
@@ -107,7 +122,10 @@ class AppServiceProvider extends ServiceProvider
         |--------------------------------------------------------------------------
         */
 
-        View::composer('components.topbar', function ($view) {
+        View::composer([
+            'components.topbar',
+            'components.notifications',
+        ], function ($view) {
             $staff = auth()->user();
 
             if (!$staff) {
@@ -123,7 +141,38 @@ class AppServiceProvider extends ServiceProvider
             $headerNotifications = $staff->notifications()
                 ->latest()
                 ->limit(8)
-                ->get();
+                ->get()
+                ->map(function ($notification) {
+                    $data = $notification->data;
+
+                    $message = match ($data['type'] ?? null) {
+                        'task_status_changed' => trim(
+                            ($data['actor_name'] ?? '')
+                            . ': '
+                            . ($data['to_status_label'] ?? '')
+                        ),
+
+                        'task_changed' =>
+                            "Topshiriq ma'lumotlari yangilandi.",
+
+                        default =>
+                            $data['message']
+                            ?? 'Tizimda yangi yangilanish mavjud.',
+                    };
+
+                    return (object) [
+                        'id' => $notification->id,
+
+                        'title' => $data['title']
+                            ?? ($data['task_number'] ?? 'Bildirishnoma'),
+
+                        'message' => $message,
+
+                        'created_at' => $notification->created_at,
+
+                        'read' => $notification->read_at !== null,
+                    ];
+                });
 
             $headerUnreadNotifications = $staff
                 ->unreadNotifications()
@@ -133,8 +182,6 @@ class AppServiceProvider extends ServiceProvider
                 'headerNotifications' => $headerNotifications,
 
                 'headerUnreadNotifications' => $headerUnreadNotifications,
-
-                // 'summary' => Task::query()->count(),
             ]);
         });
     }

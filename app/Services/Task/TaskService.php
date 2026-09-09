@@ -429,6 +429,31 @@ class TaskService
     }
 
     /**
+     * Archive (soft delete) a task.
+     */
+    public function delete(
+        Task $task,
+        Staff $actor,
+    ): void {
+        DB::transaction(function () use ($task, $actor) {
+            $task = Task::query()
+                ->lockForUpdate()
+                ->findOrFail($task->id);
+
+            $this->createLog(
+                task: $task,
+                actor: $actor,
+                eventType: TaskLogEventType::ARCHIVED,
+                fromStatus: $task->status,
+                toStatus: $task->status,
+                message: "Task archived by {$actor->full_name}.",
+            );
+
+            $task->delete();
+        });
+    }
+
+    /**
      * Generate human-readable task number.
      *
      * Example:

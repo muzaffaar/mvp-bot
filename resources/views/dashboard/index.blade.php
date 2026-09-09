@@ -142,7 +142,6 @@ $title = 'IMV IB Support — Boshqaruv paneli';
                 <figure
                     class="dashboard-chart"
                     data-chart="task-dynamics"
-                    data-dynamics='@json($stats["dynamics"] ?? [])'
                 >
                     <svg
                         aria-label="Topshiriqlar dinamikasi"
@@ -516,6 +515,74 @@ $title = 'IMV IB Support — Boshqaruv paneli';
 
                     </span>
                 </header>
+                <ul class="attention-list">
+
+                    @forelse($stats['unassigned'] ?? [] as $task)
+
+                    <li class="attention-task">
+
+                        <span class="task-avatar task-avatar--orange">
+
+                            ?
+
+                        </span>
+
+
+                        <div class="attention-task__content">
+
+                            <a href="{{ route('tasks.index') }}">
+
+                                {{ $task['title'] }}
+
+                            </a>
+
+
+                            <p>
+
+                                {{ $task['number'] }}
+
+                                ·
+
+                                Biriktirilmagan
+
+                            </p>
+
+                        </div>
+
+
+                        @if($task['created_at'])
+
+                        <time datetime="{{ $task['created_at'] }}">
+
+                            {{ \Carbon\Carbon::parse($task['created_at'])->diffForHumans() }}
+
+                        </time>
+
+                        @else
+
+                        <time>—</time>
+
+                        @endif
+
+                    </li>
+
+                    @empty
+
+                    <li class="attention-task">
+
+                        <div class="attention-task__content">
+
+                            <p>
+                                Biriktirilmagan topshiriqlar yo'q.
+                            </p>
+
+                        </div>
+
+                    </li>
+
+                    @endforelse
+
+                </ul>
 
                 <a class="attention-card__link" href="{{ route('tasks.index') }}">Barchasini ko'rish →</a>
             </article>
@@ -744,14 +811,17 @@ $title = 'IMV IB Support — Boshqaruv paneli';
 
                     </ul>
                     <footer class="source-card__footer"><span>✓ Avtomatik biriktirish
-                            aniqligi</span><strong>94%</strong>
+                            aniqligi</span><strong>{{ $stats['quick_status']['automation_accuracy'] !== null ? $stats['quick_status']['automation_accuracy'] . '%' : '—' }}</strong>
                     </footer>
             </article>
         </section>
         <section aria-label="Qo'shimcha ma'lumotlar" class="dashboard-extra-grid">
             <article class="card dashboard-summary-card">
                 <header class="dashboard-section-header">
-                    <h2>Bugungi faollik</h2><a href="#">Hisobot →</a>
+                    <h2>Bugungi faollik</h2>
+                    @can('statistics.view')
+                    <a href="{{ route('reports.index') }}">Hisobot →</a>
+                    @endcan
                 </header>
                 <dl class="activity-summary">
 
@@ -809,7 +879,7 @@ $title = 'IMV IB Support — Boshqaruv paneli';
 
                         <dd>
 
-                            {{ $stats['today']['average_response_minutes'] ?? 0 }} min
+                            {{ $stats['today']['average_response_minutes'] ?? 0 }} daqiqa
 
                         </dd>
 
@@ -861,7 +931,7 @@ $title = 'IMV IB Support — Boshqaruv paneli';
 
                         <strong>
 
-                            {{ $stats['quick_status']['automation_accuracy'] ?? 0 }}%
+                            {{ isset($stats['quick_status']['automation_accuracy']) ? $stats['quick_status']['automation_accuracy'] . '%' : '—' }}
 
                         </strong>
 

@@ -18,4 +18,5 @@ enum TaskLogEventType: string
     case PRIORITY_CHANGED = 'priority_changed';
     case COMMENTED = 'commented';
     case PUBLISHED_TO_GROUP = 'published_to_group';
+    case ARCHIVED = 'archived';
 }

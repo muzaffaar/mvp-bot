@@ -8,7 +8,7 @@ class StoreTaskCommentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('tasks.comment') ?? false;
+        return $this->user()?->can('task.comment.create') ?? false;
     }
 
     public function rules(): array

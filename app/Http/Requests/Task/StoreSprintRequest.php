@@ -8,7 +8,7 @@ class StoreSprintRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('tasks.create') ?? false;
+        return $this->user()?->can('task.create') ?? false;
     }
 
     public function rules(): array

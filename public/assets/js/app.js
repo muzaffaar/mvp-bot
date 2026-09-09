@@ -25,6 +25,92 @@
     const page = document.body.dataset.page;
     const db = window.INITIAL_DB || {};
 
+    /*
+    |--------------------------------------------------------------------------
+    | Backend API helpers
+    |--------------------------------------------------------------------------
+    |
+    | Shared by every real (non-demo) AJAX call in this file: task actions,
+    | task creation, comments.
+    |
+    */
+
+    function csrfToken() {
+        return (
+            document.querySelector('meta[name="csrf-token"]')
+                ?.content || ""
+        );
+    }
+
+    function showToast(message, variant) {
+        const region = document.getElementById("toast-region");
+
+        if (!region) {
+            window.alert(message);
+            return;
+        }
+
+        const toast = document.createElement("div");
+        toast.className = `toast toast--${variant || "success"}`;
+        toast.textContent = message;
+        region.appendChild(toast);
+
+        requestAnimationFrame(() => {
+            toast.classList.add("is-visible");
+        });
+
+        setTimeout(() => {
+            toast.classList.remove("is-visible");
+            setTimeout(() => toast.remove(), 300);
+        }, 4500);
+    }
+
+    async function apiRequest(url, options) {
+        options = options || {};
+
+        const response = await fetch(url, {
+            method: options.method || "GET",
+            headers: Object.assign(
+                {
+                    "X-CSRF-TOKEN": csrfToken(),
+                    "X-Requested-With": "XMLHttpRequest",
+                    Accept: "application/json",
+                },
+                options.body
+                    ? { "Content-Type": "application/json" }
+                    : {}
+            ),
+            body: options.body
+                ? JSON.stringify(options.body)
+                : undefined,
+        });
+
+        let payload = null;
+
+        try {
+            payload = await response.json();
+        } catch (error) {
+            payload = null;
+        }
+
+        if (!response.ok) {
+            const validationMessage =
+                payload && payload.errors
+                    ? Object.values(payload.errors)
+                        .flat()
+                        .join(" ")
+                    : null;
+
+            throw new Error(
+                validationMessage ||
+                    payload?.message ||
+                    `So‘rovda xatolik yuz berdi (${response.status}).`
+            );
+        }
+
+        return payload;
+    }
+
     function getPerson(id) {
         return (db.persons || []).find((person) => String(person.id) === String(id)) || null;
     }
@@ -1425,6 +1511,50 @@ if (backdrop) {
 document.body.classList.add(
     "has-task-detail"
 );
+
+updateTaskLifecycleButtons(task);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Toggle lifecycle action buttons based on the task's current status.
+    |--------------------------------------------------------------------------
+    |
+    | Whether a button exists at all is already decided server-side via
+    | @can(...) in the Blade template (permission check). This only hides
+    | actions that would be rejected by the backend's status-transition
+    | rules for the CURRENT status (see TaskService::validateStatusTransition).
+    |
+    */
+
+    function updateTaskLifecycleButtons(task) {
+        const status = String(
+            task.status || ""
+        ).toLowerCase();
+
+        const startButton = document.querySelector(
+            '[data-action="start-task"]'
+        );
+
+        if (startButton) {
+            const canStart =
+                status === "assigned" ||
+                status === "accepted";
+
+            startButton.hidden = !canStart;
+        }
+
+        const cancelButton = document.querySelector(
+            '[data-action="cancel-assignment"]'
+        );
+
+        if (cancelButton) {
+            const canCancel = !["closed", "cancelled"].includes(
+                status
+            );
+
+            cancelButton.hidden = !canCancel;
+        }
     }
 
     function updateTaskInsights(tasks) {
@@ -1884,22 +2014,155 @@ function openTaskDetail(taskId) {
     |--------------------------------------------------------------------------
     */
 
+    function openCreateTaskModal() {
+        const modal = document.getElementById("create-task-modal");
+
+        if (!modal) {
+            return;
+        }
+
+        modal.hidden = false;
+        document.body.classList.add("has-create-task-modal");
+    }
+
+    function closeCreateTaskModal() {
+        const modal = document.getElementById("create-task-modal");
+        const form = document.getElementById("create-task-form");
+
+        if (!modal) {
+            return;
+        }
+
+        modal.hidden = true;
+        document.body.classList.remove("has-create-task-modal");
+
+        if (form) {
+            form.reset();
+        }
+
+        const errorBox = document.getElementById(
+            "create-task-errors"
+        );
+
+        if (errorBox) {
+            errorBox.hidden = true;
+            errorBox.textContent = "";
+        }
+    }
+
     document
         .querySelectorAll(
             '[data-action="open-create-task"]'
         )
         .forEach((button) => {
-
             button.addEventListener(
                 "click",
-                () => {
-
-                    window.alert(
-                        "Yangi topshiriq formasi backend bilan integratsiya qilish uchun tayyor."
-                    );
-                }
+                openCreateTaskModal
             );
-    });
+        });
+
+    document
+        .querySelectorAll(
+            '[data-action="close-create-task"]'
+        )
+        .forEach((button) => {
+            button.addEventListener(
+                "click",
+                closeCreateTaskModal
+            );
+        });
+
+    document
+        .getElementById("create-task-modal")
+        ?.addEventListener("click", (event) => {
+            if (event.target.id === "create-task-modal") {
+                closeCreateTaskModal();
+            }
+        });
+
+    const createTaskForm = document.getElementById(
+        "create-task-form"
+    );
+
+    if (createTaskForm) {
+        createTaskForm.addEventListener(
+            "submit",
+            async (event) => {
+                event.preventDefault();
+
+                const submitButton = createTaskForm.querySelector(
+                    'button[type="submit"]'
+                );
+
+                const errorBox = document.getElementById(
+                    "create-task-errors"
+                );
+
+                const deadlineValue = document.getElementById(
+                    "create-task-deadline"
+                )?.value;
+
+                const payload = {
+                    title: document
+                        .getElementById("create-task-title")
+                        ?.value?.trim(),
+
+                    description: document
+                        .getElementById("create-task-description")
+                        ?.value?.trim() || null,
+
+                    assignment_type: "direct",
+
+                    assignee_id:
+                        Number(
+                            document.getElementById(
+                                "create-task-assignee"
+                            )?.value
+                        ) || null,
+
+                    priority: document.getElementById(
+                        "create-task-priority"
+                    )?.value || "normal",
+
+                    deadline: deadlineValue || null,
+                };
+
+                if (errorBox) {
+                    errorBox.hidden = true;
+                    errorBox.textContent = "";
+                }
+
+                if (submitButton) {
+                    submitButton.disabled = true;
+                }
+
+                try {
+                    await apiRequest("/tasks", {
+                        method: "POST",
+                        body: payload,
+                    });
+
+                    showToast(
+                        "Topshiriq yaratildi.",
+                        "success"
+                    );
+
+                    window.location.reload();
+                } catch (error) {
+                    if (errorBox) {
+                        errorBox.hidden = false;
+                        errorBox.textContent = error.message;
+                    } else {
+                        showToast(error.message, "error");
+                    }
+                } finally {
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                    }
+                }
+            }
+        );
+    }
 
 
     /*
@@ -2159,116 +2422,191 @@ document.addEventListener("keydown", function (event) {
     */
 
     const commentForm = document.querySelector(
-    '[data-action="comment-form"]'
-);
+        '[data-action="comment-form"]'
+    );
 
-if (commentForm) {
-    commentForm.addEventListener("submit", (event) => {
-        event.preventDefault();
+    if (commentForm) {
+        commentForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
 
-        // Always use CURRENTLY opened task
+            // Always use CURRENTLY opened task
+            const taskId = state.selectedTaskId;
+
+            if (!taskId) {
+                return;
+            }
+
+            const textarea = event.currentTarget.querySelector(
+                "textarea"
+            );
+
+            const body = textarea?.value?.trim();
+
+            if (!body) {
+                return;
+            }
+
+            // Find the currently selected task again
+            const task = state.tasks.find(
+                (item) => String(item.id) === String(taskId)
+            );
+
+            if (!task) {
+                return;
+            }
+
+            const submitButton = commentForm.querySelector(
+                'button[type="submit"]'
+            );
+
+            if (submitButton) {
+                submitButton.disabled = true;
+            }
+
+            try {
+                const response = await apiRequest(
+                    `/tasks/${taskId}/comments`,
+                    {
+                        method: "POST",
+                        body: { body },
+                    }
+                );
+
+                if (!Array.isArray(task.comments)) {
+                    task.comments = [];
+                }
+
+                task.comments.push({
+                    id: response.data.id,
+                    body: response.data.body,
+                    createdAt: response.data.created_at,
+
+                    staff: {
+                        id: response.data.staff?.id ?? null,
+                        name:
+                            response.data.staff?.full_name ||
+                            "Siz",
+                    },
+                });
+
+                textarea.value = "";
+
+                const panel = document.getElementById(
+                    "task-detail-panel"
+                );
+
+                if (panel) {
+                    renderComments(panel, task);
+                }
+            } catch (error) {
+                showToast(error.message, "error");
+            } finally {
+                if (submitButton) {
+                    submitButton.disabled = false;
+                }
+            }
+        });
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Task lifecycle actions: start / cancel / archive
+    |--------------------------------------------------------------------------
+    */
+
+    async function performTaskStatusChange(status, successMessage) {
         const taskId = state.selectedTaskId;
 
         if (!taskId) {
             return;
         }
 
-        const textarea = event.currentTarget.querySelector("textarea");
+        try {
+            await apiRequest(`/tasks/${taskId}/status`, {
+                method: "POST",
+                body: { status },
+            });
 
-        const body = textarea?.value?.trim();
-
-        if (!body) {
-            return;
+            showToast(successMessage, "success");
+            window.location.reload();
+        } catch (error) {
+            showToast(error.message, "error");
         }
-
-        // Find the currently selected task again
-        const task = state.tasks.find(
-            (item) => String(item.id) === String(taskId)
-        );
-
-        if (!task) {
-            return;
-        }
-
-        // Make sure comments array exists
-        if (!Array.isArray(task.comments)) {
-            task.comments = [];
-        }
-
-        const newComment = {
-            id: `temp-${Date.now()}`,
-            body: body,
-            createdAt: new Date().toISOString(),
-
-            staff: {
-                id: null,
-
-                // Replace with current logged-in user data if available
-                name: "Siz",
-            },
-        };
-
-        // IMPORTANT:
-        // Add comment ONLY to the currently selected task
-        task.comments.push(newComment);
-
-        textarea.value = "";
-
-        // Re-render the CURRENT task modal
-        const panel = document.getElementById("task-detail-panel");
-
-        if (panel) {
-            renderComments(panel, task);
-        }
-    });
-}
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Start task
-    |--------------------------------------------------------------------------
-    */
+    }
 
     document
-        .querySelector(
-            '[data-action="start-task"]'
-        )
-        ?.addEventListener(
-            "click",
-            () => {
+        .querySelector('[data-action="start-task"]')
+        ?.addEventListener("click", (event) => {
+            const button = event.currentTarget;
+            button.disabled = true;
 
-                const task =
-                    state.tasks.find(
-                        (item) =>
-                            String(item.id) ===
-                            String(
-                                state.selectedTaskId
-                            )
-                    );
+            performTaskStatusChange(
+                "in_progress",
+                "Ish boshlandi."
+            ).finally(() => {
+                button.disabled = false;
+            });
+        });
 
-                if (!task) {
-                    return;
-                }
-
-                task.status =
-                    "IN_PROGRESS";
-
-                task.startedAt =
-                    task.startedAt ||
-                    new Date()
-                        .toISOString();
-
-                /*
-                | Update UI without destroying
-                | Blade Kanban cards.
-                */
-
-                applyKanbanFilters();
-
-                renderTaskDetail();
+    document
+        .querySelector('[data-action="cancel-assignment"]')
+        ?.addEventListener("click", (event) => {
+            if (
+                !window.confirm(
+                    "Ushbu topshiriqni bekor qilmoqchimisiz?"
+                )
+            ) {
+                return;
             }
-        );
+
+            const button = event.currentTarget;
+            button.disabled = true;
+
+            performTaskStatusChange(
+                "cancelled",
+                "Topshiriq bekor qilindi."
+            ).finally(() => {
+                button.disabled = false;
+            });
+        });
+
+    document
+        .querySelector('[data-action="archive-task"]')
+        ?.addEventListener("click", async (event) => {
+            if (
+                !window.confirm(
+                    "Ushbu topshiriqni arxivlamoqchimisiz? Bu amalni keyin bekor qilib bo‘lmaydi."
+                )
+            ) {
+                return;
+            }
+
+            const taskId = state.selectedTaskId;
+
+            if (!taskId) {
+                return;
+            }
+
+            const button = event.currentTarget;
+            button.disabled = true;
+
+            try {
+                await apiRequest(`/tasks/${taskId}`, {
+                    method: "DELETE",
+                });
+
+                showToast(
+                    "Topshiriq arxivlandi.",
+                    "success"
+                );
+
+                window.location.reload();
+            } catch (error) {
+                showToast(error.message, "error");
+                button.disabled = false;
+            }
+        });
 
 
     /*
@@ -2439,17 +2777,6 @@ function applyKanbanFilters() {
             filteredTasks.length > 0;
     }
 }
-
-    function renderIndexSummary() {
-        const total = state.tasks.length;
-        const active = state.tasks.filter((task) => !isCompleted(task)).length;
-        const people = (db.persons || []).filter((person) => !person.mergedInto).length;
-        const values = { total, active, people };
-        Object.entries(values).forEach(([key, value]) => {
-            const element = document.querySelector(`[data-dashboard="${key}"]`);
-            if (element) element.textContent = String(value);
-        });
-    }
 
     function initials(name) {
         return String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part.charAt(0)).join("").toUpperCase();
@@ -2767,33 +3094,6 @@ function applyKanbanFilters() {
         renderPeople();
     }
 
-    function renderReports() {
-        const total = state.tasks.length;
-        const completed = state.tasks.filter(isCompleted).length;
-        const overdue = state.tasks.filter((task) => isOverdue(task)).length;
-        const unassigned = state.tasks.filter((task) => !task.assigneeId).length;
-        const values = { total, overdue, unassigned, completion: total ? `${Math.round((completed / total) * 100)}%` : "0%" };
-        Object.entries(values).forEach(([key, value]) => {
-            const element = document.querySelector(`[data-report="${key}"]`);
-            if (element) element.textContent = String(value);
-        });
-
-        const list = document.getElementById("report-status-list");
-        if (!list) return;
-        clearNode(list);
-        const statuses = [...new Set(state.tasks.map((task) => task.status).filter(Boolean))];
-        statuses.forEach((status) => {
-            const count = state.tasks.filter((task) => task.status === status).length;
-            const fragment = cloneTemplate("report-status-template");
-            if (!fragment) return;
-            setText(fragment, '[data-field="status"]', normalizeStatus(status));
-            setText(fragment, '[data-field="count"]', String(count));
-            const meter = fragment.querySelector('[data-field="meter"]');
-            if (meter) meter.style.width = `${total ? Math.round((count / total) * 100) : 0}%`;
-            list.append(fragment);
-        });
-    }
-
     function renderChain() {
         const list = document.getElementById("chain-list");
         if (!list) return;
@@ -2818,55 +3118,10 @@ function applyKanbanFilters() {
     }
 
 
-    const notificationState = {
-        items: []
-    };
-
-    function getNotifications() {
-        if (Array.isArray(db.notifications) && db.notifications.length) {
-            return db.notifications.map((item, index) => ({
-                id: item.id || `notification-${index}`,
-                title: item.title || "Yangi bildirishnoma",
-                message: item.message || item.body || "Tizimda yangi yangilanish mavjud.",
-                time: item.time || item.at || "Hozirgina",
-                read: Boolean(item.read)
-            }));
-        }
-
-        const tasks = Array.isArray(db.tasks) ? db.tasks.slice(0, 4) : [];
-        return tasks.map((task, index) => ({
-            id: `task-${task.id || index}`,
-            title: task.title || "Topshiriq yangilandi",
-            message: `${normalizeStatus(task.status)} · ${task.number || "Topshiriq"}`,
-            time: task.updatedAt || task.createdAt || "Hozirgina",
-            read: index > 1
-        }));
-    }
-
-    function renderNotifications() {
-        const list = document.getElementById("notification-list");
-        if (!list) return;
-        if (!notificationState.items.length) notificationState.items = getNotifications();
-        clearNode(list);
-        notificationState.items.forEach((notification) => {
-            const fragment = cloneTemplate("notification-item-template");
-            const item = fragment?.querySelector("[data-notification-id]");
-            if (!item) return;
-            item.dataset.notificationId = notification.id;
-            item.dataset.notificationRead = String(Boolean(notification.read));
-            setText(item, '[data-field="title"]', notification.title);
-            setText(item, '[data-field="message"]', notification.message);
-            setText(item, '[data-field="time"]', notification.time);
-            list.append(fragment);
-        });
-        updateNotificationCount();
-    }
-
-    function updateNotificationCount() {
-        const unread = notificationState.items.filter((item) => !item.read).length;
+    function updateNotificationCount(unreadCount) {
         document.querySelectorAll(".notification-count").forEach((element) => {
-            element.textContent = unread;
-            element.hidden = unread === 0;
+            element.textContent = String(unreadCount);
+            element.hidden = unreadCount === 0;
         });
     }
 
@@ -2881,29 +3136,71 @@ function applyKanbanFilters() {
         const card = document.getElementById("notification-card");
         const trigger = document.querySelector('[data-action="toggle-notifications"]');
         if (!card || !trigger) return;
-        renderNotifications();
 
         trigger.addEventListener("click", (event) => {
             event.stopPropagation();
             const nextHidden = !card.hidden;
             card.hidden = nextHidden;
             trigger.setAttribute("aria-expanded", String(!nextHidden));
-            if (!nextHidden) renderNotifications();
         });
 
-        card.addEventListener("click", (event) => {
+        card.addEventListener("click", async (event) => {
             const dismiss = event.target.closest('[data-action="dismiss-notification"]');
-            const markRead = event.target.closest('[data-action="mark-notifications-read"]');
-            if (markRead) {
-                notificationState.items.forEach((item) => { item.read = true; });
-                renderNotifications();
+            const markAllButton = event.target.closest('[data-action="mark-notifications-read"]');
+
+            if (markAllButton) {
+                markAllButton.disabled = true;
+
+                try {
+                    const response = await apiRequest(
+                        "/notifications/read-all",
+                        { method: "POST" }
+                    );
+
+                    card.querySelectorAll(
+                        '[data-notification-read="false"]'
+                    ).forEach((item) => {
+                        item.dataset.notificationRead = "true";
+                        item.querySelector(
+                            '[data-action="dismiss-notification"]'
+                        )?.remove();
+                    });
+
+                    markAllButton.remove();
+                    updateNotificationCount(response?.unread_count ?? 0);
+                } catch (error) {
+                    showToast(error.message, "error");
+                    markAllButton.disabled = false;
+                }
+
                 return;
             }
-            if (!dismiss) return;
+
+            if (!dismiss) {
+                return;
+            }
+
             const item = dismiss.closest("[data-notification-id]");
-            if (!item) return;
-            notificationState.items = notificationState.items.filter((entry) => String(entry.id) !== String(item.dataset.notificationId));
-            renderNotifications();
+
+            if (!item) {
+                return;
+            }
+
+            dismiss.disabled = true;
+
+            try {
+                const response = await apiRequest(
+                    `/notifications/${item.dataset.notificationId}/read`,
+                    { method: "POST" }
+                );
+
+                item.dataset.notificationRead = "true";
+                dismiss.remove();
+                updateNotificationCount(response?.unread_count ?? 0);
+            } catch (error) {
+                showToast(error.message, "error");
+                dismiss.disabled = false;
+            }
         });
 
         document.addEventListener("click", (event) => {
@@ -2943,7 +3240,6 @@ function applyKanbanFilters() {
             state.filters.search = event.target.value;
             renderTasks();
         });
-        document.querySelector('[data-action="refresh-reports"]')?.addEventListener("click", renderReports);
     }
 
 
@@ -2973,9 +3269,7 @@ function initialize() {
         bindGlobalBehavior();
         bindNotifications();
         if (page === "tasks") bindTasks();
-        if (page === "index") renderIndexSummary();
         if (page === "people") bindPeople();
-        if (page === "reports") renderReports();
         if (page === "chain") renderChain();
         if (page === "login") bindLogin();
         initializeDashboard();
