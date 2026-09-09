@@ -71,17 +71,22 @@
         <div class="app-header__actions">
 
             {{-- Qidiruv --}}
-            <label class="global-search" for="global-search">
+            <div class="global-search-wrap">
+                <label class="global-search" for="global-search">
 
-                <span class="sr-only">Qidirish</span>
+                    <span class="sr-only">Qidirish</span>
 
-                <input
-                    data-action="global-search"
-                    id="global-search"
-                    placeholder="Raqam, sarlavha yoki xodim..."
-                    type="search"
-                />
-            </label>
+                    <input
+                        autocomplete="off"
+                        data-action="global-search"
+                        id="global-search"
+                        placeholder="Raqam, sarlavha yoki xodim..."
+                        type="search"
+                    />
+                </label>
+
+                <div class="global-search-results" hidden id="global-search-results" role="listbox"></div>
+            </div>
 
             {{-- Mavzu --}}
             <button

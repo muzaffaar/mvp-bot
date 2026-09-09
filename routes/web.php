@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\QrLoginController;
 use App\Http\Controllers\Group\GroupController;
 use App\Http\Controllers\Notification\NotificationController;
 use App\Http\Controllers\Report\ReportsController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Security\SecurityController;
 use App\Http\Controllers\Staff\StaffController;
 use App\Http\Controllers\Task\SprintController;
@@ -92,6 +93,18 @@ Route::middleware('auth')->group(function () {
     )
         ->name('dashboard')
         ->middleware('can:dashboard.view');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Global search (topbar)
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/search',
+        [SearchController::class, 'index']
+    )->name('search');
 
 
     /*

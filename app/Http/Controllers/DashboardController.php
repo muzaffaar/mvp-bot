@@ -60,19 +60,34 @@ class DashboardController extends Controller
         |
         | Dashboard permission grants access to the dashboard dataset.
         |
-        | Only `assignee` (shown in the attention-card lists), `logs`
-        | (status/event checks) and `comments` (today's-comment count)
-        | are eager-loaded here — buildStatistics() never touches
-        | author/assignor/sprints or the nested comment/log relations,
-        | so loading them would only add unused query weight.
+        | `assignee`, `logs` and `comments` are used by buildStatistics()
+        | itself. `author`, `assignor` and `sprints` are eager-loaded too
+        | because the attention-card task lists (waiting acceptance,
+        | deadline risk, unassigned) feed the same task detail drawer used
+        | on the Tasks page, which needs those relations to render.
         |
         */
 
         $tasks = Task::query()
             ->with([
                 'assignee',
-                'logs',
-                'comments',
+                'author',
+                'assignor',
+                'logs' => function ($query) {
+                    $query
+                        ->with([
+                            'actor',
+                            'fromAssignee',
+                            'toAssignee',
+                        ])
+                        ->latest('created_at');
+                },
+                'comments' => function ($query) {
+                    $query
+                        ->with('staff')
+                        ->orderBy('created_at');
+                },
+                'sprints',
             ])
             ->latest()
             ->get();
@@ -673,6 +688,24 @@ class DashboardController extends Controller
                     fn (Task $task) =>
                         $this->smallTaskPayload($task)
                 )
+                ->values(),
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Attention task models
+            |--------------------------------------------------------------------------
+            |
+            | Full Task models (not the trimmed smallTaskPayload() arrays above)
+            | for every task shown in the three attention-card lists, so the
+            | dashboard can open the same task detail drawer the Tasks page
+            | uses when one of those tasks is clicked.
+            */
+
+            'attention_task_models' => $waitingAcceptance
+                ->merge($deadlineRisk)
+                ->merge($unassigned)
+                ->unique('id')
                 ->values(),
 
 

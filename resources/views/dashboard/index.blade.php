@@ -339,7 +339,7 @@ $title = 'IMV IB Support — Boshqaruv paneli';
 
                     @forelse($stats['waiting_acceptance'] ?? [] as $task)
 
-                    <li class="attention-task">
+                    <li class="attention-task" data-task-id="{{ $task['id'] }}" role="button" tabindex="0">
 
                         <span class="task-avatar task-avatar--purple">
 
@@ -350,7 +350,7 @@ $title = 'IMV IB Support — Boshqaruv paneli';
 
                         <div class="attention-task__content">
 
-                            <a href="{{ route('tasks.index') }}">
+                            <a>
 
                                 {{ $task['title'] }}
 
@@ -437,7 +437,7 @@ $title = 'IMV IB Support — Boshqaruv paneli';
                     @endphp
 
 
-                    <li class="attention-task">
+                    <li class="attention-task" data-task-id="{{ $task['id'] }}" role="button" tabindex="0">
 
                         <span class="task-avatar task-avatar--orange">
 
@@ -448,7 +448,7 @@ $title = 'IMV IB Support — Boshqaruv paneli';
 
                         <div class="attention-task__content">
 
-                            <a href="{{ route('tasks.index') }}">
+                            <a>
 
                                 {{ $task['title'] }}
 
@@ -519,7 +519,7 @@ $title = 'IMV IB Support — Boshqaruv paneli';
 
                     @forelse($stats['unassigned'] ?? [] as $task)
 
-                    <li class="attention-task">
+                    <li class="attention-task" data-task-id="{{ $task['id'] }}" role="button" tabindex="0">
 
                         <span class="task-avatar task-avatar--orange">
 
@@ -530,7 +530,7 @@ $title = 'IMV IB Support — Boshqaruv paneli';
 
                         <div class="attention-task__content">
 
-                            <a href="{{ route('tasks.index') }}">
+                            <a>
 
                                 {{ $task['title'] }}
 
@@ -989,4 +989,77 @@ $title = 'IMV IB Support — Boshqaruv paneli';
         'statusDistribution' => $stats['status_distribution'] ?? [],
     ]);
 </script>
+@php
+    // Full task detail payloads (same shape as the Tasks page) for every task
+    // shown in the attention-card lists above, so clicking one can open the
+    // same task detail drawer without a page navigation.
+    $tasksData = ($stats['attention_task_models'] ?? collect())->map(function ($task) {
+        return [
+            'id' => $task->id,
+            'number' => $task->task_number ?? ('TASK-' . $task->id),
+            'title' => $task->title,
+            'description' => $task->description,
+            'status' => $task->status instanceof \BackedEnum ? $task->status->value : $task->status,
+            'priority' => $task->priority instanceof \BackedEnum ? $task->priority->value : $task->priority,
+            'assignee' => ['id' => $task->assignee?->id, 'name' => $task->assignee?->full_name],
+            'creator' => ['id' => $task->author?->id, 'name' => $task->author?->full_name],
+            'assignor' => ['id' => $task->assignor?->id, 'name' => $task->assignor?->full_name],
+            'dueAt' => $task->deadline?->toISOString(),
+            'deadline' => $task->deadline?->toISOString(),
+            'createdAt' => $task->created_at?->toISOString(),
+            'assignedAt' => $task->started_at?->toISOString(),
+            'startedAt' => $task->started_at?->toISOString(),
+            'completedAt' => $task->completed_at?->toISOString(),
+            'closedAt' => $task->closed_at?->toISOString(),
+            'statusDates' => [
+                'created' => optional($task->created_at)->toISOString(),
+                'assigned' => optional($task->created_at)->toISOString(),
+                'in_progress' => optional($task->started_at)->toISOString(),
+                'awaiting_acceptance' => optional($task->completed_at)->toISOString(),
+                'accepted' => optional($task->completed_at)->toISOString(),
+                'completion_approved' => optional($task->completed_at)->toISOString(),
+                'closed' => optional($task->closed_at)->toISOString(),
+            ],
+            'sourceType' => $task->source_type,
+            'sourceMessageId' => $task->source_message_id,
+            'sourceUrl' => $task->source_url,
+            'sourceText' => $task->description ?? '',
+            'confidence' => $task->ajralish_aniqligi,
+            'comments' => $task->comments->map(fn ($comment) => [
+                'id' => $comment->id,
+                'body' => $comment->body ?? $comment->comment ?? '',
+                'createdAt' => $comment->created_at?->toISOString(),
+                'staff' => ['id' => $comment->staff?->id, 'name' => $comment->staff?->full_name],
+            ])->values(),
+            'logs' => $task->logs->map(fn ($log) => [
+                'id' => $log->id,
+                'createdAt' => $log->created_at?->toISOString(),
+                'actor' => $log->actor?->full_name,
+                'fromAssignee' => $log->fromAssignee?->full_name,
+                'toAssignee' => $log->toAssignee?->full_name,
+                'action' => $log->action ?? '',
+                'description' => $log->description ?? '',
+            ])->values(),
+            'sprints' => $task->sprints->map(fn ($sprint) => [
+                'id' => $sprint->id,
+                'name' => $sprint->name,
+            ])->values(),
+        ];
+    })->values();
+@endphp
+<script>
+    window.tasksData = @json($tasksData);
+</script>
+@endsection
+
+@section('overlays')
+@include('components.task-detail-drawer')
+<template id="checklist-item-template"><label class="checklist-item"><input data-checklist-complete="" type="checkbox" /><span data-checklist-title=""></span></label></template>
+<template id="history-item-template">
+    <li class="history-item"><span class="history-item__dot"></span>
+        <div><strong data-history-title=""></strong>
+            <p data-history-description=""></p><time data-history-time=""></time>
+        </div>
+    </li>
+</template>
 @endsection

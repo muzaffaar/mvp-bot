@@ -3241,13 +3241,163 @@ function applyKanbanFilters() {
                 applyTheme(root.dataset.theme === "dark" ? "light" : "dark");
             });
         });
-        document.querySelector('[data-action="global-search"]')?.addEventListener("input", (event) => {
-            if (page !== "tasks") return;
-            const search = document.getElementById("task-search");
-            if (!search) return;
-            search.value = event.target.value;
-            state.filters.search = event.target.value;
-            renderTasks();
+        bindGlobalSearch();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Global search (topbar)
+    |--------------------------------------------------------------------------
+    |
+    | Matches tasks (by number/title) and staff (by name) via GET /search,
+    | rendered as a live dropdown under the topbar search input. Present on
+    | every page. Selecting a task opens the same detail drawer used on the
+    | Tasks page in place if already there, otherwise navigates to the Tasks
+    | page with ?open={id} so it opens on load. Selecting a staff member
+    | navigates straight to their profile page.
+    */
+    function bindGlobalSearch() {
+        const input = document.querySelector('[data-action="global-search"]');
+        const results = document.getElementById("global-search-results");
+        if (!input || !results) return;
+
+        let debounceTimer = null;
+        let requestToken = 0;
+
+        function closeResults() {
+            results.hidden = true;
+            results.replaceChildren();
+        }
+
+        function makeItem({ title, subtitle, url, taskId }) {
+            const item = document.createElement("a");
+            item.className = "global-search-results__item";
+            item.href = url;
+            item.setAttribute("role", "option");
+            if (taskId) item.dataset.taskId = taskId;
+
+            const strong = document.createElement("strong");
+            strong.textContent = title || "—";
+
+            const small = document.createElement("small");
+            small.textContent = subtitle || "";
+
+            item.append(strong, small);
+
+            item.addEventListener("click", (event) => {
+                if (taskId && page === "tasks") {
+                    event.preventDefault();
+                    openTaskDetail(taskId);
+                }
+                closeResults();
+                input.blur();
+            });
+
+            return item;
+        }
+
+        function appendGroup(label, items, renderItem) {
+            if (!items.length) return;
+
+            const heading = document.createElement("div");
+            heading.className = "global-search-results__group-label";
+            heading.textContent = label;
+            results.append(heading);
+
+            items.forEach((item) => results.append(renderItem(item)));
+        }
+
+        async function runSearch(query) {
+            const token = ++requestToken;
+
+            results.hidden = false;
+            results.replaceChildren();
+
+            const loading = document.createElement("div");
+            loading.className = "global-search-results__loading";
+            loading.textContent = "Qidirilmoqda…";
+            results.append(loading);
+
+            let payload;
+            try {
+                payload = await apiRequest(`/search?q=${encodeURIComponent(query)}`);
+            } catch (error) {
+                if (token !== requestToken) return;
+                results.replaceChildren();
+                const errorState = document.createElement("div");
+                errorState.className = "global-search-results__empty";
+                errorState.textContent = "Qidiruvda xatolik yuz berdi.";
+                results.append(errorState);
+                return;
+            }
+
+            if (token !== requestToken) return;
+
+            const tasks = Array.isArray(payload?.tasks) ? payload.tasks : [];
+            const staffResults = Array.isArray(payload?.staff) ? payload.staff : [];
+
+            results.replaceChildren();
+
+            if (!tasks.length && !staffResults.length) {
+                const empty = document.createElement("div");
+                empty.className = "global-search-results__empty";
+                empty.textContent = "Hech narsa topilmadi.";
+                results.append(empty);
+                return;
+            }
+
+            appendGroup("Topshiriqlar", tasks, (task) => makeItem({
+                title: task.title || task.number,
+                subtitle: [task.number, task.status ? normalizeStatus(task.status) : null].filter(Boolean).join(" · "),
+                url: task.url,
+                taskId: task.id,
+            }));
+
+            appendGroup("Xodimlar", staffResults, (person) => makeItem({
+                title: person.name,
+                subtitle: person.position || "",
+                url: person.url,
+            }));
+        }
+
+        input.addEventListener("input", (event) => {
+            const query = event.target.value.trim();
+            clearTimeout(debounceTimer);
+
+            if (query.length < 2) {
+                requestToken++;
+                closeResults();
+                return;
+            }
+
+            debounceTimer = setTimeout(() => runSearch(query), 300);
+        });
+
+        input.addEventListener("focus", () => {
+            if (results.childElementCount && input.value.trim().length >= 2) {
+                results.hidden = false;
+            }
+        });
+
+        input.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                closeResults();
+                input.blur();
+                return;
+            }
+
+            if (event.key === "Enter") {
+                const first = results.querySelector(".global-search-results__item");
+                if (first) {
+                    event.preventDefault();
+                    first.click();
+                }
+            }
+        });
+
+        document.addEventListener("click", (event) => {
+            if (event.target === input || results.contains(event.target)) return;
+            closeResults();
         });
     }
 
@@ -3277,11 +3427,32 @@ function initialize() {
         state.tasks = Array.isArray(db.tasks) ? db.tasks.slice() : [];
         bindGlobalBehavior();
         bindNotifications();
-        if (page === "tasks") bindTasks();
+        if (page === "tasks") {
+            bindTasks();
+            openTaskFromQueryString();
+        }
         if (page === "people") bindPeople();
         if (page === "chain") renderChain();
         if (page === "login") bindLogin();
+        if (page === "dashboard") bindDashboardTaskModal();
         initializeDashboard();
+    }
+
+    // Lets the global search (and any other page) deep-link straight into a
+    // task: /tasks?open={id} opens that task's detail drawer on load, then
+    // the query string is cleaned up so refreshing/going back doesn't
+    // reopen it.
+    function openTaskFromQueryString() {
+        const params = new URLSearchParams(window.location.search);
+        const openId = params.get("open");
+        if (!openId) return;
+
+        openTaskDetail(openId);
+
+        params.delete("open");
+        const query = params.toString();
+        const newUrl = window.location.pathname + (query ? `?${query}` : "") + window.location.hash;
+        window.history.replaceState({}, "", newUrl);
     }
 
     document.addEventListener("DOMContentLoaded", initialize);
@@ -3975,5 +4146,108 @@ function initialize() {
 
         renderDashboardStatusDonut();
 
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Dashboard task modal
+    |--------------------------------------------------------------------------
+    |
+    | The dashboard's attention-card lists (waiting acceptance, deadline
+    | risk, unassigned) link to real tasks. Clicking one opens the same
+    | task detail drawer used on the Tasks page instead of navigating away.
+    | window.tasksData here only covers the tasks shown in those three
+    | lists (see DashboardController::buildStatistics()'s
+    | attention_task_models), not every task in the system.
+    */
+    function bindDashboardTaskModal() {
+        state.tasks = Array.isArray(window.tasksData)
+            ? window.tasksData.map((task) => ({
+                ...task,
+                comments: Array.isArray(task.comments) ? task.comments : [],
+                logs: Array.isArray(task.logs) ? task.logs : [],
+                checklist: Array.isArray(task.checklist) ? task.checklist : [],
+            }))
+            : [];
+
+        function openFromEvent(event) {
+            const item = event.target.closest(".attention-task[data-task-id]");
+            if (!item) return;
+            if (event.target.closest("a, button")) return;
+            event.preventDefault();
+            openTaskDetail(item.dataset.taskId);
+        }
+
+        document.addEventListener("click", openFromEvent);
+        document.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            const item = event.target.closest(".attention-task[data-task-id]");
+            if (!item) return;
+            event.preventDefault();
+            openTaskDetail(item.dataset.taskId);
+        });
+
+        document.querySelectorAll('[data-action="close-task"]').forEach((button) => {
+            button.addEventListener("click", () => {
+                state.selectedTaskId = null;
+                const panel = document.getElementById("task-detail-panel");
+                const backdrop = document.getElementById("task-detail-backdrop");
+                if (panel) panel.hidden = true;
+                if (backdrop) backdrop.hidden = true;
+                document.body.classList.remove("has-task-detail");
+            });
+        });
+
+        document.querySelectorAll('[data-action="detail-tab"]').forEach((button) => {
+            button.addEventListener("click", () => updateDetailTab(button.dataset.detailTab));
+        });
+
+        const commentForm = document.querySelector('[data-action="comment-form"]');
+        if (commentForm) {
+            commentForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+
+                const taskId = state.selectedTaskId;
+                if (!taskId) return;
+
+                const textarea = event.currentTarget.querySelector("textarea");
+                const body = textarea?.value?.trim();
+                if (!body) return;
+
+                const task = state.tasks.find((item) => String(item.id) === String(taskId));
+                if (!task) return;
+
+                const submitButton = commentForm.querySelector('button[type="submit"]');
+                if (submitButton) submitButton.disabled = true;
+
+                try {
+                    const response = await apiRequest(`/tasks/${taskId}/comments`, {
+                        method: "POST",
+                        body: { body },
+                    });
+
+                    if (!Array.isArray(task.comments)) task.comments = [];
+
+                    task.comments.push({
+                        id: response.data.id,
+                        body: response.data.body,
+                        createdAt: response.data.created_at,
+                        staff: {
+                            id: response.data.staff?.id ?? null,
+                            name: response.data.staff?.full_name || "Siz",
+                        },
+                    });
+
+                    textarea.value = "";
+
+                    const panel = document.getElementById("task-detail-panel");
+                    if (panel) renderComments(panel, task);
+                } catch (error) {
+                    showToast(error.message, "error");
+                } finally {
+                    if (submitButton) submitButton.disabled = false;
+                }
+            });
+        }
     }
 })();
