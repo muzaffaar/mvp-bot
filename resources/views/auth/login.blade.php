@@ -126,7 +126,7 @@
 
                     <p class="login-telegram-card__title">
 
-                        QR kodni Telegramdan skanerlang
+                        QR kodni skanerlang
 
                     </p>
 
@@ -134,19 +134,17 @@
 
                     <p class="login-telegram-card__text">
 
-                        yoki
-
                         <strong>
-                            @IMV_IB_Support
+                            {{ config('services.telegram.bot_username') }}
                         </strong>
 
-                        ga
+                        da
 
                         <strong>
-                            “Kirish”
+                            "Tasdiqlash"
                         </strong>
 
-                        deb yozing
+                        tugmasini bosing
 
                     </p>
 
