@@ -14,11 +14,13 @@ $title = 'IMV IB Support — Xodimlar';
                 <p class="muted">Xodimlar, taxalluslar, rollar va tizimdagi holatlarni boshqaring.</p>
             </div>
             <div class="people-page__actions">
-                <label class="field field--inline">
-                    <span>Qidirish</span>
-                    <input data-action="search-people" id="people-search" placeholder="Ism, username yoki Telegram ID"
-                        type="search" />
-                </label>
+                <form action="{{ route('staff.index') }}" id="people-search-form" method="GET">
+                    <label class="field field--inline">
+                        <span>Qidirish</span>
+                        <input data-action="search-people" id="people-search" name="search"
+                            placeholder="Ism, username yoki Telegram ID" type="search" value="{{ $search ?? '' }}" />
+                    </label>
+                </form>
             </div>
         </header>
         <section aria-label="Xodimlar jadvali" class="people-table-card card">
@@ -220,8 +222,25 @@ $title = 'IMV IB Support — Xodimlar';
                 </table>
             </div>
             <div class="people-table-footer">
-                <p class="muted" id="people-pagination-summary"></p>
+                <p class="muted" id="people-pagination-summary">
+                    {{ $staff->total() }} ta xodimdan {{ $staff->firstItem() ?? 0 }}–{{ $staff->lastItem() ?? 0 }}
+                </p>
+                @if ($staff->hasPages())
+                <nav aria-label="Xodimlar sahifalari" class="pagination" id="people-pagination">
+                    @if (!$staff->onFirstPage())
+                    <a class="pagination-button" href="{{ $staff->previousPageUrl() }}">‹</a>
+                    @endif
+                    @foreach ($staff->getUrlRange(1, $staff->lastPage()) as $page => $url)
+                    <a class="pagination-page {{ $page === $staff->currentPage() ? 'is-active' : '' }}"
+                        href="{{ $url }}">{{ $page }}</a>
+                    @endforeach
+                    @if ($staff->hasMorePages())
+                    <a class="pagination-button" href="{{ $staff->nextPageUrl() }}">›</a>
+                    @endif
+                </nav>
+                @else
                 <nav aria-label="Xodimlar sahifalari" class="pagination" id="people-pagination"></nav>
+                @endif
             </div>
         </section>
         <p class="empty-state" hidden="" id="people-empty">Xodim topilmadi.</p>

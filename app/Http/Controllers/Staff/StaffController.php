@@ -24,12 +24,24 @@ class StaffController extends Controller
     ) {
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
+        $search = trim((string) $request->query('search', ''));
+
         $staff = Staff::query()
             ->with('roles')
+            ->when(
+                $search !== '',
+                fn ($query) => $query->where(function ($builder) use ($search) {
+                    $builder
+                        ->where('full_name', 'like', "%{$search}%")
+                        ->orWhere('username', 'like', "%{$search}%")
+                        ->orWhere('telegram_chat_id', 'like', "%{$search}%");
+                })
+            )
             ->latest()
-            ->paginate(20);
+            ->paginate(20)
+            ->appends($search !== '' ? ['search' => $search] : []);
 
         $availableRoles = Role::query()
             ->orderBy('name')
@@ -39,7 +51,8 @@ class StaffController extends Controller
             'staff.index',
             compact(
                 'staff',
-                'availableRoles'
+                'availableRoles',
+                'search'
             )
         );
     }

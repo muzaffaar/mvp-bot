@@ -3009,20 +3009,19 @@ function applyKanbanFilters() {
     }
 
     function bindPeople() {
-        document.querySelector('[data-action="search-people"]')?.addEventListener("input", () => {
-            state.peoplePage = 1;
-            renderPeople();
-        });
-        document.querySelector('[data-action="filter-people"]')?.addEventListener("change", () => {
-            state.peoplePage = 1;
-            renderPeople();
-        });
-        document.getElementById("people-pagination")?.addEventListener("click", (event) => {
-            const button = event.target.closest('[data-action="change-people-page"]');
-            if (!button) return;
-            state.peoplePage = Number(button.dataset.page) || 1;
-            renderPeople();
-        });
+        // The people list, its pagination and its search are all rendered
+        // server-side by StaffController@index (?search=...), so searching
+        // just debounces a submit of the search form — no client-side
+        // re-render needed.
+        const searchInput = document.querySelector('[data-action="search-people"]');
+        const searchForm = document.getElementById("people-search-form");
+        if (searchInput && searchForm) {
+            let debounceTimer = null;
+            searchInput.addEventListener("input", () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => searchForm.requestSubmit(), 400);
+            });
+        }
         document.getElementById("people-list")?.addEventListener("click", (event) => {
             const actionElement = event.target.closest("[data-action]");
             const row = event.target.closest(".person-row");
@@ -3100,7 +3099,6 @@ function applyKanbanFilters() {
                     closePersonEditModal();
                 }
             });
-        renderPeople();
     }
 
     function renderChain() {
