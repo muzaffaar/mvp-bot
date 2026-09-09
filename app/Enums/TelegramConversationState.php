@@ -16,7 +16,4 @@ enum TelegramConversationState: string
 
     case WAITING_TASK_MANAGEMENT_COMMENT =
         'waiting_task_management_comment';
-
-    case WAITING_TASK_MANAGEMENT_ASSIGNEE_SEARCH =
-        'waiting_task_management_assignee_search';
 }

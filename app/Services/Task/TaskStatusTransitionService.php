@@ -7,9 +7,11 @@ use App\Enums\TaskStatus;
 use App\Events\TaskStatusChanged;
 use App\Models\Staff;
 use App\Models\Task;
+use App\Models\TaskTelegramMessage;
 use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class TaskStatusTransitionService
 {
@@ -20,7 +22,15 @@ class TaskStatusTransitionService
      *
      * Eligibility is determined by:
      *
-     *     Staff.group_chat_id === current Telegram chat ID
+     *     A TaskTelegramMessage row exists for (task, actor) — i.e. the
+     *     actor was one of the staff members the original group broadcast
+     *     was sent to (resolved once, at creation time, from the real
+     *     Telegram group chat — see TaskCreationService::resolveRecipients()).
+     *
+     * $chatId is NOT the group's chat ID here: the "Accept" button lives in
+     * each candidate's own private chat with the bot (broadcast messages
+     * are sent as individual DMs, not posted in the group), so it cannot
+     * be compared against Staff.group_chat_id. It is kept only for logging.
      *
      * The actual assignment is protected by a database row lock so
      * only one eligible staff member can win the race.
@@ -30,6 +40,16 @@ class TaskStatusTransitionService
         Staff $actor,
         int $chatId,
     ): Task {
+        Log::info('acceptGroupTask: attempt started.', [
+            'task_id' => $task->id,
+            'staff_id' => $actor->id,
+            'staff_status' => $actor->status,
+            'chat_id' => $chatId,
+            'assignment_type' => $task->assignment_type?->value,
+            'task_status' => $task->status?->value,
+            'assignee_id' => $task->assignee_id,
+        ]);
+
         /*
          * Cheap validation before opening the transaction.
          *
@@ -39,6 +59,11 @@ class TaskStatusTransitionService
             $task->assignment_type?->value !== 'group'
             || $task->assignee_id !== null
         ) {
+            Log::info('acceptGroupTask: rejected, not an open group task.', [
+                'task_id' => $task->id,
+                'staff_id' => $actor->id,
+            ]);
+
             throw new DomainException(
                 'Bu vazifa ochiq vazifa emas.'
             );
@@ -48,20 +73,26 @@ class TaskStatusTransitionService
          * The task must be waiting for somebody to accept it.
          */
         if ($task->status !== TaskStatus::ASSIGNED) {
+            Log::info('acceptGroupTask: rejected, task not in ASSIGNED status.', [
+                'task_id' => $task->id,
+                'staff_id' => $actor->id,
+                'task_status' => $task->status?->value,
+            ]);
+
             throw new DomainException(
                 'Bu vazifa allaqachon qabul qilingan yoki mavjud emas.'
             );
         }
 
         /*
-         * Verify Telegram-chat membership before entering the
-         * critical section.
+         * Verify eligibility before entering the critical section.
          *
          * This is only a cheap preliminary check.
          *
          * The same check is repeated after acquiring the task lock.
          */
         $isGroupMember = $this->isEligibleTelegramMember(
+            task: $task,
             actor: $actor,
             chatId: $chatId,
         );
@@ -128,12 +159,13 @@ class TaskStatusTransitionService
             }
 
             /*
-             * Verify that the actor is still an active member of
-             * the current Telegram chat.
+             * Verify that the actor is still eligible to claim this
+             * task now that we hold the row lock.
              *
              * There is intentionally NO Task->group relationship.
              */
             if (! $this->isEligibleTelegramMember(
+                task: $lockedTask,
                 actor: $actor,
                 chatId: $chatId,
             )) {
@@ -152,6 +184,12 @@ class TaskStatusTransitionService
             $lockedTask->update([
                 'assignee_id' => $actor->id,
                 'status' => TaskStatus::ACCEPTED,
+            ]);
+
+            Log::info('acceptGroupTask: accepted successfully.', [
+                'task_id' => $lockedTask->id,
+                'staff_id' => $actor->id,
+                'chat_id' => $chatId,
             ]);
 
             /*
@@ -200,29 +238,53 @@ class TaskStatusTransitionService
     }
 
     /**
-     * Check whether a staff member is an active member of the
-     * current Telegram chat.
+     * Check whether a staff member is allowed to claim this open group
+     * task.
      *
-     * Telegram user ID:
-     *     Staff.telegram_chat_id
+     * Two conditions:
      *
-     * Telegram group/chat ID:
-     *     Staff.group_chat_id
+     *   1. The staff member is currently active.
+     *   2. They were one of the candidates the original group broadcast
+     *      was sent to — i.e. a TaskTelegramMessage row exists linking
+     *      them to this task (created once, at creation time, from the
+     *      real Telegram group's membership — see
+     *      TaskCreationService::resolveRecipients()).
+     *
+     * $chatId cannot be used for this check: the "Accept" button lives in
+     * the candidate's own private chat with the bot, not the group chat,
+     * so Staff.group_chat_id (the group's chat ID) is never comparable to
+     * it. $chatId is accepted only so it can be logged for diagnostics.
      */
     private function isEligibleTelegramMember(
+        Task $task,
         Staff $actor,
         int $chatId,
     ): bool {
         if ($actor->status !== 'active') {
+            Log::info('isEligibleTelegramMember: rejected, staff not active.', [
+                'task_id' => $task->id,
+                'staff_id' => $actor->id,
+                'staff_status' => $actor->status,
+                'chat_id' => $chatId,
+            ]);
+
             return false;
         }
 
-        /*
-         * group_chat_id identifies the Telegram group.
-         *
-         * telegram_chat_id identifies the Telegram user.
-         */
-        return (string) $actor->group_chat_id === (string) $chatId;
+        $wasOriginalRecipient = TaskTelegramMessage::query()
+            ->where('task_id', $task->id)
+            ->where('staff_id', $actor->id)
+            ->whereIn('role', ['notification', 'update'])
+            ->exists();
+
+        Log::info('isEligibleTelegramMember: eligibility check.', [
+            'task_id' => $task->id,
+            'staff_id' => $actor->id,
+            'chat_id' => $chatId,
+            'was_original_recipient' => $wasOriginalRecipient,
+        ]);
+
+        return $wasOriginalRecipient;
     }
 
     /*

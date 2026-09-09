@@ -112,6 +112,9 @@ class TaskManagementService
         if ($task->status->isFinal() || in_array($task->status, [TaskStatus::AWAITING_ACCEPTANCE, TaskStatus::COMPLETION_APPROVED], true)) {
             throw new DomainException('Bu holatdagi vazifani qayta biriktirib bo‘lmaydi.');
         }
+        if ($newAssignee->id === $actor->id) {
+            throw new DomainException('Vazifani o‘zingizga qayta biriktira olmaysiz.');
+        }
         if (! $newAssignee->isActive() || ! $newAssignee->telegram_chat_id) {
             throw new DomainException('Tanlangan xodim faol Telegram foydalanuvchisi emas.');
         }
@@ -223,10 +226,17 @@ class TaskManagementService
 
         $recipients = $this->notificationRecipients($task);
         if ($recipients->isEmpty()) {
+            Log::warning('sendReminder: no recipients resolved.', [
+                'task_id' => $task->id,
+                'assignment_type' => $task->assignment_type?->value,
+                'assignee_id' => $task->assignee_id,
+            ]);
+
             throw new DomainException('Vazifa bajaruvchisining Telegram chati topilmadi.');
         }
 
         $this->broadcast(
+            $task,
             $recipients,
             "🔔 <b>Vazifa eslatmasi</b>\n\n" . $this->taskDetailsText($task),
         );
@@ -244,6 +254,13 @@ class TaskManagementService
     {
         $recipients = $this->notificationRecipients($task);
         if ($recipients->isEmpty()) {
+            Log::warning('notifyAssigneeOfChange: no recipients resolved, nothing sent.', [
+                'task_id' => $task->id,
+                'heading' => $heading,
+                'assignment_type' => $task->assignment_type?->value,
+                'assignee_id' => $task->assignee_id,
+            ]);
+
             return;
         }
 
@@ -252,11 +269,12 @@ class TaskManagementService
             $text .= "\n\n{$extra}";
         }
 
-        $this->broadcast($recipients, $text);
+        $this->broadcast($task, $recipients, $text);
     }
 
     /**
-     * Every Telegram chat ID that should currently hear about this task.
+     * Every {staff_id, chat_id} pair that should currently hear about this
+     * task.
      *
      * Once a task has an assignee, only they need to know. An unaccepted
      * GROUP task has no assignee yet, so everyone who received the original
@@ -267,43 +285,122 @@ class TaskManagementService
     private function notificationRecipients(Task $task): Collection
     {
         if ($task->assignee?->telegram_chat_id) {
-            return collect([(int) $task->assignee->telegram_chat_id]);
+            Log::info('notificationRecipients: resolved via assignee.', [
+                'task_id' => $task->id,
+                'assignee_id' => $task->assignee->id,
+            ]);
+
+            return collect([[
+                'staff_id' => $task->assignee->id,
+                'chat_id' => (int) $task->assignee->telegram_chat_id,
+            ]]);
         }
 
         if ($task->assignment_type !== TaskAssignmentType::GROUP) {
+            Log::warning('notificationRecipients: no assignee and not a GROUP task, resolved 0 recipients.', [
+                'task_id' => $task->id,
+                'assignment_type' => $task->assignment_type?->value,
+            ]);
+
             return collect();
         }
 
-        return TaskTelegramMessage::query()
+        // Only rows for the actual per-candidate broadcast ('notification')
+        // and prior follow-up notices ('update') represent real candidates.
+        // Other roles ('task_created_notification', 'original', 'context',
+        // 'task_update', ...) point at unrelated messages — the group's
+        // announcement, the triggering user message, etc. — not candidates.
+        $recipients = TaskTelegramMessage::query()
             ->where('task_id', $task->id)
-            ->pluck('chat_id')
-            ->map(fn ($chatId) => (int) $chatId)
-            ->unique()
+            ->whereIn('role', ['notification', 'update'])
+            ->get(['staff_id', 'chat_id'])
+            ->map(fn ($row) => [
+                'staff_id' => $row->staff_id,
+                'chat_id' => (int) $row->chat_id,
+            ])
+            ->unique('chat_id')
             ->values();
+
+        Log::info('notificationRecipients: resolved via TaskTelegramMessage (unaccepted GROUP task).', [
+            'task_id' => $task->id,
+            'recipient_count' => $recipients->count(),
+        ]);
+
+        return $recipients;
     }
 
     /**
-     * Send the same message to one or more chats, without letting one
+     * Send the same message to one or more recipients, without letting one
      * recipient's failure (blocked bot, deleted chat, etc.) stop the rest.
+     *
+     * While a GROUP task is still open to more than one candidate, each
+     * delivered message is tracked as a "update" TaskTelegramMessage row so
+     * that once someone accepts, everyone else's copy can be cleaned up —
+     * see TaskStatusCallback::deleteGroupTaskMessages().
      */
-    private function broadcast(Collection $chatIds, string $text): void
+    private function broadcast(Task $task, Collection $recipients, string $text): void
     {
-        foreach ($chatIds as $chatId) {
+        $isGroupBroadcast = $recipients->count() > 1;
+        $delivered = 0;
+
+        foreach ($recipients as $recipient) {
             try {
-                $this->telegram->sendMessage($chatId, $text, parseMode: 'HTML');
+                $response = $this->telegram->sendMessage(
+                    $recipient['chat_id'],
+                    $text,
+                    parseMode: 'HTML',
+                );
+
+                $delivered++;
             } catch (\Throwable $e) {
                 Log::warning('Failed to deliver task notification.', [
-                    'chat_id' => $chatId,
+                    'task_id' => $task->id,
+                    'staff_id' => $recipient['staff_id'] ?? null,
+                    'chat_id' => $recipient['chat_id'],
                     'error' => $e->getMessage(),
+                ]);
+
+                continue;
+            }
+
+            if (! $isGroupBroadcast || ! $recipient['staff_id']) {
+                continue;
+            }
+
+            $messageId = $response['result']['message_id'] ?? null;
+
+            if ($messageId) {
+                TaskTelegramMessage::create([
+                    'task_id' => $task->id,
+                    'staff_id' => $recipient['staff_id'],
+                    'chat_id' => $recipient['chat_id'],
+                    'message_id' => $messageId,
+                    'role' => 'update',
                 ]);
             }
         }
+
+        Log::info('broadcast: delivery summary.', [
+            'task_id' => $task->id,
+            'recipient_count' => $recipients->count(),
+            'delivered_count' => $delivered,
+            'is_group_broadcast' => $isGroupBroadcast,
+        ]);
     }
 
 
     public function cleanupTaskNotificationMessages(Task $task): void
     {
-        $messages = TaskTelegramMessage::query()->where('task_id', $task->id)->get();
+        // Only the original per-candidate "tap to accept" broadcast
+        // messages (role: 'notification') are stale action prompts that
+        // belong here. Follow-up "update" notices, the group's "task
+        // created" announcement ('task_created_notification'), and
+        // message-context links ('original', 'context', 'task_update')
+        // are historical record and must stay visible.
+        $messages = TaskTelegramMessage::query()
+            ->where('task_id', $task->id)
+            ->where('role', 'notification')
+            ->get();
         foreach ($messages as $message) {
             try {
                 $this->telegram->deleteMessage($message->chat_id, $message->message_id);

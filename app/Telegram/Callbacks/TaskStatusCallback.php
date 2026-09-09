@@ -579,11 +579,41 @@ class TaskStatusCallback
 
     private function deleteGroupTaskMessages(Task $task): void
     {
+        /*
+         * Only two roles are ever eligible for cleanup here:
+         *
+         *   'notification' — the original per-candidate "tap to accept"
+         *                     broadcast DM (has a now-stale Accept button).
+         *   'update'        — a follow-up notice (edit/deadline/reminder)
+         *                     sent to candidates while the task was open.
+         *
+         * Every other role — 'task_created_notification' (the group's
+         * "✅ Vazifa yaratildi" announcement), 'original' (the user's own
+         * message that triggered task creation), 'context', 'task_update',
+         * etc. — is historical record, not a stale action prompt, and must
+         * never be touched here.
+         */
         $messages = TaskTelegramMessage::query()
             ->where('task_id', $task->id)
+            ->whereIn('role', ['notification', 'update'])
             ->get();
 
         foreach ($messages as $message) {
+            /*
+             * Keep the accepting assignee's own copy of any "update"
+             * message (edits/deadline changes/reminders sent while the
+             * task was still open to the whole group). Every other
+             * candidate's copy, and every original "tap to accept"
+             * broadcast message (including the assignee's own), is
+             * removed as before.
+             */
+            if (
+                $message->role === 'update'
+                && (int) $message->staff_id === (int) $task->assignee_id
+            ) {
+                continue;
+            }
+
             try {
                 $this->telegram->deleteMessage(
                     chatId: $message->chat_id,
@@ -598,10 +628,8 @@ class TaskStatusCallback
                     'error' => $e->getMessage(),
                 ]);
             }
-        }
 
-        TaskTelegramMessage::query()
-            ->where('task_id', $task->id)
-            ->delete();
+            $message->delete();
+        }
     }
 }
