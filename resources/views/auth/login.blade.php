@@ -5,6 +5,17 @@
 <head>
     <meta charset="UTF-8">
 
+    <script>
+        (function () {
+            try {
+                var theme = window.localStorage.getItem("imv-theme");
+                if (!theme) {
+                    theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+                }
+                document.documentElement.dataset.theme = theme;
+            } catch (_) {}
+        })();
+    </script>
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
