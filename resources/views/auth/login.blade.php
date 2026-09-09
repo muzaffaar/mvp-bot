@@ -296,6 +296,10 @@
 
                 let timerInterval = null;
 
+                let regenerateTimeout = null;
+
+                let isRegenerating = false;
+
 
                 /*
                  |--------------------------------------------------------------------------
@@ -434,6 +438,24 @@
                 const createQrSession =
                     async () => {
 
+                        isRegenerating = false;
+
+
+                        clearInterval(
+                            statusInterval
+                        );
+
+
+                        clearInterval(
+                            timerInterval
+                        );
+
+
+                        clearTimeout(
+                            regenerateTimeout
+                        );
+
+
                         try {
 
                             const browserHash =
@@ -505,6 +527,12 @@
 
                             updateStatusText();
 
+                            timerInterval =
+                                setInterval(
+                                    updateStatusText,
+                                    1000
+                                );
+
                             startPolling();
 
                         } catch (error) {
@@ -522,6 +550,56 @@
                             }
 
                         }
+
+                    };
+
+
+
+                /*
+                 |--------------------------------------------------------------------------
+                 | Handle Expired Session
+                 |--------------------------------------------------------------------------
+                 |
+                 | Stops the running timers, shows a brief "expired" message,
+                 | then automatically requests a fresh QR session so the user
+                 | never has to refresh the page.
+                 |
+                 */
+
+                const handleSessionExpired =
+                    () => {
+
+                        if (isRegenerating) {
+                            return;
+                        }
+
+
+                        isRegenerating = true;
+
+
+                        clearInterval(
+                            statusInterval
+                        );
+
+
+                        clearInterval(
+                            timerInterval
+                        );
+
+
+                        if (statusElement) {
+
+                            statusElement.textContent =
+                                '● QR sessiya muddati tugadi · yangilanmoqda...';
+
+                        }
+
+
+                        regenerateTimeout =
+                            setTimeout(
+                                createQrSession,
+                                1500
+                            );
 
                     };
 
@@ -602,18 +680,7 @@
                             difference <= 0
                         ) {
 
-                            clearInterval(
-                                timerInterval
-                            );
-
-
-                            clearInterval(
-                                statusInterval
-                            );
-
-
-                            statusElement.textContent =
-                                '● QR sessiya muddati tugadi';
+                            handleSessionExpired();
 
                         }
 
@@ -716,24 +783,7 @@
                                 data.status === 'expired'
                             ) {
 
-                                clearInterval(
-                                    statusInterval
-                                );
-
-
-                                clearInterval(
-                                    timerInterval
-                                );
-
-
-                                if (
-                                    statusElement
-                                ) {
-
-                                    statusElement.textContent =
-                                        '● QR sessiya muddati tugadi';
-
-                                }
+                                handleSessionExpired();
 
                             }
 
@@ -851,13 +901,6 @@
                  */
 
                 createQrSession();
-
-
-                timerInterval =
-                    setInterval(
-                        updateStatusText,
-                        1000
-                    );
 
 
                 const startPolling =
