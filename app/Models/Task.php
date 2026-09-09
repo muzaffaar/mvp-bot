@@ -65,12 +65,19 @@ class Task extends Model
     |--------------------------------------------------------------------------
     */
 
+    /*
+    | withTrashed() on all three: a staff member who has since left a group
+    | (soft-deleted) must still show up correctly on tasks they already
+    | authored/assigned/were assigned before leaving. Soft-delete only needs
+    | to keep them OUT of future assignment eligibility, not erase history.
+    */
+
     public function author(): BelongsTo
     {
         return $this->belongsTo(
             Staff::class,
             'author_id'
-        );
+        )->withTrashed();
     }
 
     public function assignor(): BelongsTo
@@ -78,7 +85,7 @@ class Task extends Model
         return $this->belongsTo(
             Staff::class,
             'assignor_id'
-        );
+        )->withTrashed();
     }
 
     public function assignee(): BelongsTo
@@ -86,7 +93,7 @@ class Task extends Model
         return $this->belongsTo(
             Staff::class,
             'assignee_id'
-        );
+        )->withTrashed();
     }
 
     /*

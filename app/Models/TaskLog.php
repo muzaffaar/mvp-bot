@@ -46,9 +46,11 @@ class TaskLog extends Model
         return $this->belongsTo(Task::class);
     }
 
+    // withTrashed(): these are immutable audit records, so a staff member
+    // who has since left (soft-deleted) must still resolve here by name.
     public function actor(): BelongsTo
     {
-        return $this->belongsTo(Staff::class, 'actor_id');
+        return $this->belongsTo(Staff::class, 'actor_id')->withTrashed();
     }
 
     public function fromAssignee(): BelongsTo
@@ -56,7 +58,7 @@ class TaskLog extends Model
         return $this->belongsTo(
             Staff::class,
             'from_assignee_id'
-        );
+        )->withTrashed();
     }
 
     public function toAssignee(): BelongsTo
@@ -64,6 +66,6 @@ class TaskLog extends Model
         return $this->belongsTo(
             Staff::class,
             'to_assignee_id'
-        );
+        )->withTrashed();
     }
 }

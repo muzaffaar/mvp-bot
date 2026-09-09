@@ -3,9 +3,7 @@
 namespace App\Telegram\Services;
 
 use App\Models\Staff;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class TelegramMemberSynchronizer
 {
@@ -79,35 +77,23 @@ class TelegramMemberSynchronizer
             return;
         }
 
-        try {
-            DB::transaction(function () use ($staff): void {
-                // Remove role assignments explicitly; Spatie pivot rows do not
-                // necessarily have a database FK that cascades from staff.
-                $staff->syncRoles([]);
-                $staff->delete();
-            });
-        } catch (QueryException $exception) {
-            /*
-             * Some long-lived business records intentionally use RESTRICT
-             * foreign keys (for example authored tasks/comments). In that case
-             * a hard delete would fail and repeatedly crash the Telegram queue.
-             * Keep historical data intact while immediately removing the person
-             * from the active synchronized group/staff pool.
-             */
-            Log::warning('Telegram member could not be hard-deleted; deactivating staff instead.', [
-                'staff_id' => $staff->id,
-                'telegram_user_id' => $telegramUserId,
-                'group_chat_id' => $groupChatId,
-                'exception' => $exception->getMessage(),
-            ]);
-
+        /*
+         * A staff member who leaves the group is soft-deleted, never hard
+         * deleted: their history (authored/assigned tasks, comments, logs)
+         * must stay intact. Being trashed already excludes them from every
+         * default Staff::query() used to pick assignment candidates, and
+         * status/group fields are cleared too as a belt-and-suspenders
+         * guard for any code that checks those directly.
+         */
+        DB::transaction(function () use ($staff): void {
             $staff->syncRoles([]);
             $staff->update([
                 'status' => 'inactive',
                 'group_chat_id' => null,
                 'group_name' => null,
             ]);
-        }
+            $staff->delete();
+        });
     }
 
     /**
@@ -162,7 +148,11 @@ class TelegramMemberSynchronizer
             $groupChatId,
             $groupName
         ): void {
-            $staff = Staff::query()
+            // withTrashed(): a staff member who previously left this (or
+            // another) group is soft-deleted, not gone. Rejoining must
+            // restore the same identity/history rather than create a
+            // duplicate record.
+            $staff = Staff::withTrashed()
                 ->where('telegram_chat_id', $telegramUserId)
                 ->first();
 
@@ -180,6 +170,10 @@ class TelegramMemberSynchronizer
                 return;
             }
 
+            if ($staff->trashed()) {
+                $staff->restore();
+            }
+
             $staff->update([
                 'status' => 'active',
                 'group_chat_id' => $groupChatId,
@@ -187,6 +181,13 @@ class TelegramMemberSynchronizer
                 'full_name' => $this->fullName($member),
                 'username' => $member['username'] ?? null,
             ]);
+
+            // remove() strips all roles on leave; restore the default role
+            // if none are left, without clobbering a role an admin may have
+            // set for someone who never actually left.
+            if ($staff->roles()->count() === 0) {
+                $staff->syncRoles(['executor']);
+            }
         });
     }
 

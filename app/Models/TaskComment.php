@@ -36,7 +36,9 @@ class TaskComment extends Model
 
     public function staff(): BelongsTo
     {
-        return $this->belongsTo(Staff::class);
+        // withTrashed(): a comment must still show its author's name even
+        // after that staff member has since left (soft-deleted).
+        return $this->belongsTo(Staff::class)->withTrashed();
     }
 
     public function attachments(): HasMany
