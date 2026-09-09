@@ -385,8 +385,10 @@ class TaskManagementCallback
         $this->telegram->answerCallbackQuery($cb,'Vazifa bekor qilindi.');
         // The card remains; only its action buttons are removed.
         $this->telegram->editMessageReplyMarkup($chat,$mid,null);
-        $this->service->cleanupTaskNotificationMessages($task);
+        // Notify before cleanup: for an unaccepted GROUP task, the recipient
+        // list lives only in the TaskTelegramMessage rows that cleanup deletes.
         $this->service->notifyAssigneeOfChange($task,'❌ <b>Vazifa bekor qilindi</b>');
+        $this->service->cleanupTaskNotificationMessages($task);
     }
     private function remind(Staff $staff,int $id,string $cb,int $chat,int $mid):void{$this->requirePermission($staff,Permission::TaskUpdate);$task=$this->service->taskForViewer($id,$staff);if(!$task)throw new DomainException('Vazifa topilmadi.');$this->service->sendReminder($task,$staff);$this->telegram->answerCallbackQuery($cb,'Eslatma yuborildi.');$this->clean($chat,$mid);$this->telegram->sendMessage($chat,'📨 Eslatma yuborildi.');}
     private function clean(int $chat,int $mid):void{try{$this->telegram->deleteMessage($chat,$mid);}catch(Throwable $e){Log::debug('Task management cleanup failed',['message_id'=>$mid]);}}

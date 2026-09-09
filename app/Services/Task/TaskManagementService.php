@@ -13,7 +13,9 @@ use App\Models\TaskTelegramMessage;
 use App\Telegram\Services\TelegramClient;
 use Carbon\Carbon;
 use DomainException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Support\TashkentDateTime;
 
 class TaskManagementService
@@ -218,14 +220,15 @@ class TaskManagementService
         if ($task->assignor_id !== $actor->id) {
             throw new DomainException('Faqat vazifa beruvchisi eslatma yuborishi mumkin.');
         }
-        if (! $task->assignee?->telegram_chat_id) {
+
+        $recipients = $this->notificationRecipients($task);
+        if ($recipients->isEmpty()) {
             throw new DomainException('Vazifa bajaruvchisining Telegram chati topilmadi.');
         }
 
-        $this->telegram->sendMessage(
-            $task->assignee->telegram_chat_id,
+        $this->broadcast(
+            $recipients,
             "🔔 <b>Vazifa eslatmasi</b>\n\n" . $this->taskDetailsText($task),
-            parseMode: 'HTML',
         );
 
         $task->logs()->create([
@@ -233,13 +236,14 @@ class TaskManagementService
             'event_type' => TaskLogEventType::STATUS_CHANGED,
             'from_status' => $task->status,
             'to_status' => $task->status,
-            'message' => 'Reminder sent to assignee.',
+            'message' => "Reminder sent to {$recipients->count()} recipient(s).",
         ]);
     }
 
     public function notifyAssigneeOfChange(Task $task, string $heading, string $extra = ''): void
     {
-        if (! $task->assignee?->telegram_chat_id) {
+        $recipients = $this->notificationRecipients($task);
+        if ($recipients->isEmpty()) {
             return;
         }
 
@@ -248,11 +252,52 @@ class TaskManagementService
             $text .= "\n\n{$extra}";
         }
 
-        $this->telegram->sendMessage(
-            $task->assignee->telegram_chat_id,
-            $text,
-            parseMode: 'HTML',
-        );
+        $this->broadcast($recipients, $text);
+    }
+
+    /**
+     * Every Telegram chat ID that should currently hear about this task.
+     *
+     * Once a task has an assignee, only they need to know. An unaccepted
+     * GROUP task has no assignee yet, so everyone who received the original
+     * broadcast (tracked via TaskTelegramMessage rows) must be told instead
+     * — otherwise follow-up edits, deadline changes, reminders, and
+     * cancellations silently reach nobody.
+     */
+    private function notificationRecipients(Task $task): Collection
+    {
+        if ($task->assignee?->telegram_chat_id) {
+            return collect([(int) $task->assignee->telegram_chat_id]);
+        }
+
+        if ($task->assignment_type !== TaskAssignmentType::GROUP) {
+            return collect();
+        }
+
+        return TaskTelegramMessage::query()
+            ->where('task_id', $task->id)
+            ->pluck('chat_id')
+            ->map(fn ($chatId) => (int) $chatId)
+            ->unique()
+            ->values();
+    }
+
+    /**
+     * Send the same message to one or more chats, without letting one
+     * recipient's failure (blocked bot, deleted chat, etc.) stop the rest.
+     */
+    private function broadcast(Collection $chatIds, string $text): void
+    {
+        foreach ($chatIds as $chatId) {
+            try {
+                $this->telegram->sendMessage($chatId, $text, parseMode: 'HTML');
+            } catch (\Throwable $e) {
+                Log::warning('Failed to deliver task notification.', [
+                    'chat_id' => $chatId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
 
