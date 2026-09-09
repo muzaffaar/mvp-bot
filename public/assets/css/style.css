@@ -17,6 +17,14 @@
     --danger: #d64545;
     --danger-soft: #fff0f0;
     --review: #7a56d8;
+    --status-new: #3156b6;
+    --status-assigned: #5043a3;
+    --status-progress: #6a3eb4;
+    --status-review: #236783;
+    --status-accepted: #16694f;
+    --status-closed: #4b5563;
+    --status-returned: #a25a12;
+    --status-danger: #b53939;
     --shadow-sm: 0 1px 2px rgba(16, 24, 40, .05);
     --shadow-lg: 0 18px 45px rgba(16, 24, 40, .12);
     --radius-sm: 10px;
@@ -476,7 +484,7 @@ h3 { margin-bottom: 4px; }
 .status-breakdown li span { display: inline-flex; align-items: center; gap: 9px; }
 .status-breakdown strong { color: var(--text); }
 .status-dot { width: 10px; height: 10px; flex: 0 0 10px; display: inline-block; border-radius: 3px; background: var(--brand); }
-.status-dot--new { background: #3156b6; }.status-dot--assigned { background: #5043a3; }.status-dot--paused { background: #6a3eb4; }.status-dot--returned { background: #a25a12; }.status-dot--review { background: #236783; }.status-dot--accepted { background: #16694f; }.status-dot--closed { background: #4b5563; }.status-dot--warning { background: #a66a06; }.status-dot--danger { background: #b53939; }
+.status-dot--new { background: var(--status-new); }.status-dot--assigned { background: var(--status-assigned); }.status-dot--paused { background: var(--status-progress); }.status-dot--returned { background: var(--status-returned); }.status-dot--review { background: var(--status-review); }.status-dot--accepted { background: var(--status-accepted); }.status-dot--closed { background: var(--status-closed); }.status-dot--warning { background: #a66a06; }.status-dot--danger { background: var(--status-danger); }
 .dashboard-attention-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .attention-card { min-height: 250px; display: flex; flex-direction: column; }
 .attention-card__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

@@ -4042,42 +4042,42 @@ function initialize() {
 
             {
                 key: "created",
-                color: "var(--status-new, #6b7280)"
+                color: "var(--status-new, #3156b6)"
             },
 
             {
                 key: "assigned",
-                color: "var(--status-assigned, #3b82f6)"
+                color: "var(--status-assigned, #5043a3)"
             },
 
             {
                 key: "in_progress",
-                color: "var(--status-progress, #f59e0b)"
+                color: "var(--status-progress, #6a3eb4)"
             },
 
             {
                 key: "awaiting_acceptance",
-                color: "var(--status-review, #8b5cf6)"
+                color: "var(--status-review, #236783)"
             },
 
             {
                 key: "accepted",
-                color: "var(--status-accepted, #10b981)"
+                color: "var(--status-accepted, #16694f)"
             },
 
             {
                 key: "closed",
-                color: "var(--status-closed, #374151)"
+                color: "var(--status-closed, #4b5563)"
             },
 
             {
                 key: "returned",
-                color: "var(--status-returned, #ef4444)"
+                color: "var(--status-returned, #a25a12)"
             },
 
             {
                 key: "cancelled",
-                color: "var(--status-danger, #dc2626)"
+                color: "var(--status-danger, #b53939)"
             }
 
         ];
