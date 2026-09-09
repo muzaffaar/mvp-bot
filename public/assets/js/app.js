@@ -675,6 +675,20 @@
         });
     }
 
+    function getStatusDateFallback(task, stepStatus) {
+        const fallbacks = {
+            created: task.createdAt,
+            assigned: task.assignedAt || task.createdAt,
+            accepted: task.startedAt,
+            in_progress: task.startedAt,
+            awaiting_acceptance: task.completedAt,
+            completion_approved: task.completedAt,
+            closed: task.closedAt
+        };
+
+        return fallbacks[stepStatus] || null;
+    }
+
     function updateStatusLine(panel, task) {
         const statusOrder = [
             "created",
@@ -705,11 +719,6 @@
         currentStatus = statusAliases[currentStatus] || currentStatus;
 
         const currentIndex = statusOrder.indexOf(currentStatus);
-
-        console.log("Task status:", task.status);
-        console.log("Normalized status:", currentStatus);
-        console.log("Status index:", currentIndex);
-        console.log("Status dates:", task.statusDates);
 
         panel.querySelectorAll("[data-status-step]").forEach((step) => {
 
