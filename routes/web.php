@@ -155,7 +155,11 @@ Route::middleware('auth')->group(function () {
         ->middlewareFor(['index', 'show'], 'can:staff.view')
         ->middlewareFor(['create', 'store'], 'can:staff.create')
         ->middlewareFor(['edit', 'update'], 'can:staff.update')
-        ->middlewareFor('destroy', 'can:staff.delete');
+        ->middlewareFor('destroy', 'can:staff.delete')
+        // A deleted (soft-deleted, left-the-group) staff member's profile
+        // must stay viewable for history — editing them is deliberately
+        // not opted in; reactivation only happens by rejoining the group.
+        ->withTrashed(['show']);
 
     Route::post(
         '/staff/{staff}/regenerate-token',

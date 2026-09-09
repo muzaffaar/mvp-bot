@@ -28,7 +28,7 @@ class StaffController extends Controller
     {
         $search = trim((string) $request->query('search', ''));
 
-        $staff = Staff::query()
+        $staff = Staff::withTrashed()
             ->with('roles')
             ->when(
                 $search !== '',
@@ -280,6 +280,18 @@ class StaffController extends Controller
     public function destroy(
         Staff $staff
     ): RedirectResponse {
+        /*
+         * Same treatment as TelegramMemberSynchronizer::remove(): soft
+         * delete only (history stays intact), roles stripped, and status
+         * set explicitly so the profile/list pages read correctly even if
+         * something loads this record with withTrashed().
+         */
+        $staff->syncRoles([]);
+        $staff->update([
+            'status' => 'deleted',
+            'group_chat_id' => null,
+            'group_name' => null,
+        ]);
         $staff->delete();
 
         return redirect()

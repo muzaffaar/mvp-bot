@@ -6,6 +6,13 @@
     $initials = collect(preg_split('/\s+/', trim($staff->full_name ?? '')))
         ->filter()->take(2)
         ->map(fn ($part) => mb_strtoupper(mb_substr($part, 0, 1)))->implode('');
+    $staffStatusLabel = match(true) {
+        $staff->trashed() => "O'chirilgan",
+        $staff->status === 'active' => 'Faol',
+        $staff->status === 'blocked' => 'Bloklangan',
+        $staff->status === 'inactive' => 'Tasdiq kutilmoqda',
+        default => 'Nomaʼlum',
+    };
 @endphp
 
 @section('content')
@@ -25,7 +32,7 @@
             </div>
             <div class="staff-profile-hero__meta">
                 <div><span>Jami topshiriqlar</span><strong>{{ $tasks->count() }}</strong></div>
-                <div><span>Holat</span><strong class="staff-profile-status">{{ ($staff->status ?? '') === 'active' ? 'Faol' : 'Faol emas' }}</strong></div>
+                <div><span>Holat</span><strong class="staff-profile-status" data-status="{{ $staff->trashed() ? 'deleted' : $staff->status }}">{{ $staffStatusLabel }}</strong></div>
             </div>
         </header>
 

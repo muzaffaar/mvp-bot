@@ -43,7 +43,17 @@ $title = 'IMV IB Support — Xodimlar';
                         @php
                         $status = strtoupper($person->status ?? '');
 
-                        $isActive = $status === 'ACTIVE';
+                        $isDeleted = $person->trashed();
+
+                        $statusKey = $isDeleted ? 'deleted' : strtolower($person->status ?? '');
+
+                        $statusLabel = match(true) {
+                        $isDeleted => "O'chirilgan",
+                        $status === 'ACTIVE' => 'Faol',
+                        $status === 'BLOCKED' => 'Bloklangan',
+                        $status === 'INACTIVE' => 'Tasdiq kutilmoqda',
+                        default => 'Nomaʼlum',
+                        };
 
                         $initials = collect(
                         preg_split('/\s+/', trim($person->full_name ?? ''))
@@ -58,10 +68,10 @@ $title = 'IMV IB Support — Xodimlar';
                         ->values();
                         @endphp
 
-                        <tr class="person-row" data-person-id="{{ $person->id }}"
+                        <tr class="person-row {{ $isDeleted ? 'person-row--deleted' : '' }}" data-person-id="{{ $person->id }}"
                             data-person-name="{{ $person->full_name }}" data-person-username="{{ $person->username }}"
                             data-person-telegram-id="{{ $person->telegram_chat_id }}"
-                            data-person-status="{{ $person->status }}" data-person-post="{{ $person->lavozim }}"
+                            data-person-status="{{ $statusKey }}" data-person-post="{{ $person->lavozim }}"
                             data-person-created-at="{{ optional($person->created_at)->toISOString() }}"
                             data-person-roles='@json($roles)' data-person-group-id="{{ $person->group_chat_id }}"
                             data-person-group-name="{{ $person->group_name }}">
@@ -170,12 +180,9 @@ $title = 'IMV IB Support — Xodimlar';
                             {{-- Holat --}}
                             <td>
 
-                                <span class="person-status" data-status="{{ strtolower($person->status ?? '') }}">
+                                <span class="person-status" data-status="{{ $statusKey }}">
 
-                                    {{ $isActive
-                                    ? 'Faol'
-                                    : 'Tasdiq kutilmoqda'
-                                    }}
+                                    {{ $statusLabel }}
 
                                 </span>
 
@@ -185,6 +192,7 @@ $title = 'IMV IB Support — Xodimlar';
                             {{-- Actions --}}
                             <td>
 
+                                @unless ($isDeleted)
                                 <button aria-label="Xodimni tahrirlash" class="table-icon-button"
                                     data-action="edit-person" data-person-id="{{ $person->id }}"
                                     data-full-name="{{ $person->full_name }}" data-username="{{ $person->username }}"
@@ -197,6 +205,7 @@ $title = 'IMV IB Support — Xodimlar';
                                     data-update-url="{{ route('staff.update', $person) }}" type="button">
                                     ✎
                                 </button>
+                                @endunless
 
                             </td>
 

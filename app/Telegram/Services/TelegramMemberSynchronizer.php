@@ -88,7 +88,7 @@ class TelegramMemberSynchronizer
         DB::transaction(function () use ($staff): void {
             $staff->syncRoles([]);
             $staff->update([
-                'status' => 'inactive',
+                'status' => 'deleted',
                 'group_chat_id' => null,
                 'group_name' => null,
             ]);
