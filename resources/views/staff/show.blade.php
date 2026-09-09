@@ -181,6 +181,13 @@ $tasksData = $tasks->map(fn ($task) => [
         const date = new Date(value);
         return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('uz-UZ');
     };
+    const formatDateTime = (value) => {
+        if (!value) return '—';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '—';
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    };
 
     function filteredTasks() {
         const search = document.getElementById('task-search')?.value.trim().toLowerCase() || '';
@@ -371,7 +378,7 @@ $tasksData = $tasks->map(fn ($task) => [
 
             const dateValue = task.statusDates?.[stepStatus] || null;
             if (time) {
-                time.textContent = formatDate(dateValue);
+                time.textContent = formatDateTime(dateValue);
                 if (dateValue) time.dateTime = dateValue;
                 else time.removeAttribute('datetime');
             }
