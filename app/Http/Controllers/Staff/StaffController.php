@@ -198,7 +198,15 @@ class StaffController extends Controller
         $staff->update([
             'full_name' => $validated['full_name'],
 
-            'username' => $validated['username'] ?? null,
+            /*
+             * The edit form has no username field (it's set elsewhere, e.g.
+             * via Telegram activation), so only overwrite it when a value
+             * is actually passed — otherwise keep whatever is already
+             * stored instead of wiping it to null on every save.
+             */
+            'username' => $request->filled('username')
+                ? $validated['username']
+                : $staff->username,
 
             'login' => $validated['login'] ?? null,
 
