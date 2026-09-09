@@ -11,14 +11,62 @@ use App\Http\Requests\Task\UpdateTaskRequest;
 use App\Models\Staff;
 use App\Models\Task;
 use App\Services\Task\TaskService;
+use App\Services\Task\TaskStatusTransitionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class TaskController extends Controller
 {
+    /**
+     * Kanban column key => the TaskStatus it represents. The single place
+     * that maps board columns to lifecycle statuses — reused to both group
+     * tasks into columns and to derive which column-to-column drags are
+     * legal per task/actor (see allowedKanbanColumns() below).
+     */
+    private const KANBAN_COLUMNS = [
+        'NEW' => TaskStatus::CREATED,
+        'ASSIGNED' => TaskStatus::ASSIGNED,
+        'ACCEPTED' => TaskStatus::ACCEPTED,
+        'IN_PROGRESS' => TaskStatus::IN_PROGRESS,
+        'SUBMITTED' => TaskStatus::AWAITING_ACCEPTANCE,
+        'APPROVED' => TaskStatus::COMPLETION_APPROVED,
+        'CLOSED' => TaskStatus::CLOSED,
+    ];
+
     public function __construct(
         private readonly TaskService $taskService,
+        private readonly TaskStatusTransitionService $statusTransitionService,
     ) {
+    }
+
+    /**
+     * Which kanban columns THIS specific task may legally be dragged into
+     * by THIS specific actor right now — derived straight from
+     * TaskStatusTransitionService::canTransition(), which applies the same
+     * per-task assignee/assignor authorization and lifecycle graph the
+     * /tasks/{task}/status endpoint itself enforces. A task's status is
+     * never "changeable by everyone": this is why the check is per task
+     * and per actor, not a single board-wide permission flag.
+     *
+     * The ASSIGNED column is always excluded as a target: moving a task
+     * there means picking who it's assigned to, which a status-only drag
+     * can't express — that goes through the dedicated assign flow instead.
+     */
+    private function allowedKanbanColumns(Task $task, Staff $actor): array
+    {
+        $allowed = [];
+
+        foreach (self::KANBAN_COLUMNS as $column => $status) {
+            if ($column === 'ASSIGNED' || $status === $task->status) {
+                continue;
+            }
+
+            if ($this->statusTransitionService->canTransition($task, $status, $actor)) {
+                $allowed[] = $column;
+            }
+        }
+
+        return $allowed;
     }
 
     public function index(Request $request)
@@ -186,6 +234,23 @@ class TaskController extends Controller
                 ->count(),
         ];
 
+        /*
+        |--------------------------------------------------------------------------
+        | Kanban drag-and-drop
+        |--------------------------------------------------------------------------
+        |
+        | Per task, per current user: which columns it may be dragged into
+        | right now. Keyed by task id so the view can attach it to each
+        | card without re-deriving anything.
+        */
+        $actor = $request->user();
+
+        $taskAllowedColumns = $actor
+            ? $tasks->mapWithKeys(
+                fn (Task $task) => [$task->id => $this->allowedKanbanColumns($task, $actor)]
+            )->all()
+            : [];
+
         return view('tasks.index', [
             'page' => 'tasks',
 
@@ -205,6 +270,8 @@ class TaskController extends Controller
             'alertTask' => $alertTask,
 
             'taskStatistics' => $taskStatistics,
+
+            'taskAllowedColumns' => $taskAllowedColumns,
 
             /*
             |--------------------------------------------------------------------------

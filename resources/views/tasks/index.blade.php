@@ -122,7 +122,7 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
 
                         @forelse ($tasksByStatus['NEW'] as $task)
 
-                        <article class="task-card" data-task-id="{{ $task->id }}" role="button" tabindex="0">
+                        <article class="task-card" data-allowed-columns="{{ implode(',', $taskAllowedColumns[$task->id] ?? []) }}" data-task-id="{{ $task->id }}" draggable="true" role="button" tabindex="0">
 
                             <header class="task-card__meta">
                                 <span class="task-card__number">
@@ -230,7 +230,7 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
 
                         @forelse ($tasksByStatus['ASSIGNED'] as $task)
 
-                        <article class="task-card" data-task-id="{{ $task->id }}" role="button" tabindex="0">
+                        <article class="task-card" data-allowed-columns="{{ implode(',', $taskAllowedColumns[$task->id] ?? []) }}" data-task-id="{{ $task->id }}" draggable="true" role="button" tabindex="0">
 
                             <header class="task-card__meta">
 
@@ -331,7 +331,7 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
 
                         @forelse ($tasksByStatus['ACCEPTED'] as $task)
 
-                        <article class="task-card" data-task-id="{{ $task->id }}" role="button" tabindex="0">
+                        <article class="task-card" data-allowed-columns="{{ implode(',', $taskAllowedColumns[$task->id] ?? []) }}" data-task-id="{{ $task->id }}" draggable="true" role="button" tabindex="0">
 
                             <header class="task-card__meta">
 
@@ -436,7 +436,7 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
 
                         @forelse ($tasksByStatus['IN_PROGRESS'] as $task)
 
-                        <article class="task-card" data-task-id="{{ $task->id }}" role="button" tabindex="0">
+                        <article class="task-card" data-allowed-columns="{{ implode(',', $taskAllowedColumns[$task->id] ?? []) }}" data-task-id="{{ $task->id }}" draggable="true" role="button" tabindex="0">
 
                             <header class="task-card__meta">
 
@@ -543,7 +543,7 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
 
                         @forelse ($tasksByStatus['SUBMITTED'] as $task)
 
-                        <article class="task-card" data-task-id="{{ $task->id }}" role="button" tabindex="0">
+                        <article class="task-card" data-allowed-columns="{{ implode(',', $taskAllowedColumns[$task->id] ?? []) }}" data-task-id="{{ $task->id }}" draggable="true" role="button" tabindex="0">
 
                             <header class="task-card__meta">
 
@@ -648,7 +648,7 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
 
                         @forelse ($tasksByStatus['APPROVED'] as $task)
 
-                        <article class="task-card" data-task-id="{{ $task->id }}" role="button" tabindex="0">
+                        <article class="task-card" data-allowed-columns="{{ implode(',', $taskAllowedColumns[$task->id] ?? []) }}" data-task-id="{{ $task->id }}" draggable="true" role="button" tabindex="0">
 
                             <header class="task-card__meta">
 
@@ -755,7 +755,7 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
 
                         @forelse ($tasksByStatus['CLOSED'] as $task)
 
-                        <article class="task-card" data-task-id="{{ $task->id }}" role="button" tabindex="0">
+                        <article class="task-card" data-allowed-columns="{{ implode(',', $taskAllowedColumns[$task->id] ?? []) }}" data-task-id="{{ $task->id }}" draggable="true" role="button" tabindex="0">
 
                             <header class="task-card__meta">
 
@@ -1110,8 +1110,29 @@ $title = $title ?? 'IMV IB Support — Topshiriqlar';
     </section>
 </div>
 @endcan
+<div class="modal-backdrop" hidden id="completion-comment-modal">
+    <section aria-labelledby="completion-comment-modal-title" aria-modal="true" class="person-profile-modal person-profile-modal--compact card" role="dialog">
+        <header class="person-profile-modal__header">
+            <h2 id="completion-comment-modal-title">Ishni yakunlash</h2>
+            <button aria-label="Yopish" class="modal-close" data-action="close-completion-comment" type="button">×</button>
+        </header>
+        <form id="completion-comment-form">
+            <div class="person-profile-modal__body">
+                <label class="field">
+                    <span>Bajarilgan ish haqida izoh (majburiy)</span>
+                    <textarea id="completion-comment-text" placeholder="Nima qilinganini yozing…" required rows="4"></textarea>
+                </label>
+                <p class="form-error-list" hidden id="completion-comment-error"></p>
+            </div>
+            <footer class="person-profile-modal__footer">
+                <button class="btn btn--ghost" data-action="close-completion-comment" type="button">Bekor qilish</button>
+                <button class="btn btn--primary" type="submit">Yuborish</button>
+            </footer>
+        </form>
+    </section>
+</div>
 <template id="task-card-template">
-    <article class="task-card" data-task-id="" role="button" tabindex="0">
+    <article class="task-card" data-task-id="" draggable="true" role="button" tabindex="0">
         <header class="task-card__meta"><span class="task-card__number" data-task-field="number"></span><button
                 aria-label="Topshiriq menyusi" class="task-card__menu" type="button">⋯</button></header>
         <h3 class="task-card__title" data-task-field="title"></h3>

@@ -44,11 +44,24 @@ class ChangeTaskStatusRequest extends FormRequest
                 Rule::enum(TaskStatus::class),
             ],
 
+            /*
+             * "Bajarildi" (IN_PROGRESS -> AWAITING_ACCEPTANCE) strictly
+             * requires a completion comment, mirroring the Telegram bot's
+             * own completion flow (TaskCompletionCommentHandler).
+             */
             'comment' => [
                 'nullable',
                 'string',
                 'max:5000',
+                'required_if:status,' . TaskStatus::AWAITING_ACCEPTANCE->value,
             ],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'comment.required_if' => 'Ishni yakunlash uchun izoh yozish shart.',
         ];
     }
 }

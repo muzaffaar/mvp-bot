@@ -891,6 +891,31 @@ body[data-page="tasks"] .app-sidebar {
     background: var(--brand);
 }
 
+/* ========================================
+   Kanban drag & drop
+======================================== */
+.task-card[draggable="true"] { cursor: grab; }
+.task-card.is-dragging { cursor: grabbing; opacity: .45; box-shadow: none; transform: scale(.98); }
+.task-card.is-drop-valid { border-color: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.task-card.is-drop-invalid { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.task-card.is-drop-rejected { animation: task-card-reject .3s ease; }
+.task-card.is-dropped { animation: task-card-drop-in .22s ease; }
+
+@keyframes task-card-reject {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+@keyframes task-card-drop-in {
+    from { opacity: .4; transform: scale(.96); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.kanban-column { transition: background-color .15s ease, border-color .15s ease; }
+.kanban-column.is-drop-target { border-color: var(--success); background: color-mix(in srgb, var(--success-soft) 55%, var(--surface)); }
+.kanban-column.is-drop-invalid { border-color: var(--danger); background: color-mix(in srgb, var(--danger-soft) 45%, var(--surface)); }
+
 .task-card__progress small {
     position: absolute;
     right: 0;
@@ -1299,6 +1324,8 @@ body.has-task-detail .tasks-board-shell { pointer-events: none; }
     border-radius: 18px;
     box-shadow: 0 28px 80px rgba(15, 23, 42, .3);
 }
+
+.person-profile-modal--compact { width: min(480px, calc(100vw - 56px)); }
 
 .person-profile-modal__header,
 .person-profile-modal__footer {

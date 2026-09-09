@@ -9,11 +9,17 @@ use App\Enums\TaskStatus;
 use App\Models\Staff;
 use App\Models\Task;
 use App\Models\TaskLog;
+use DomainException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class TaskService
 {
+    public function __construct(
+        private readonly TaskStatusTransitionService $statusTransitionService,
+    ) {
+    }
+
     /**
      * Create a new task.
      *
@@ -351,7 +357,14 @@ class TaskService
     }
 
     /**
-     * Change task status.
+     * Change task status from the admin panel.
+     *
+     * Delegates entirely to TaskStatusTransitionService::change() — the
+     * same method the Telegram bot uses — so the panel gets the exact same
+     * per-task assignee/assignor authorization, lifecycle graph, timestamp
+     * handling and TaskStatusChanged event dispatch as the bot. A task's
+     * status can only ever be changed by "everyone" if the graph and
+     * authorization rules say so; there is no separate, looser panel path.
      */
     public function changeStatus(
         Task $task,
@@ -359,73 +372,18 @@ class TaskService
         Staff $actor,
         ?string $message = null,
     ): Task {
-        return DB::transaction(function () use (
-            $task,
-            $newStatus,
-            $actor,
-            $message,
-        ) {
-            $task = Task::query()
-                ->lockForUpdate()
-                ->findOrFail($task->id);
-
-            $oldStatus = $task->status;
-
-            if ($oldStatus === $newStatus) {
-                throw ValidationException::withMessages([
-                    'status' =>
-                        'Task is already in this status.',
-                ]);
-            }
-
-            $this->validateStatusTransition(
-                $oldStatus,
-                $newStatus
-            );
-
-            $updates = [
-                'status' => $newStatus,
-            ];
-
-            if (
-                $newStatus === TaskStatus::IN_PROGRESS
-                && $task->started_at === null
-            ) {
-                $updates['started_at'] = now();
-            }
-
-            if ($newStatus === TaskStatus::CLOSED) {
-                $updates['completed_at'] ??= now();
-                $updates['closed_at'] = now();
-            }
-
-            $task->update($updates);
-
-            $eventType = match ($newStatus) {
-                TaskStatus::IN_PROGRESS =>
-                    TaskLogEventType::STARTED,
-
-                TaskStatus::CLOSED =>
-                    TaskLogEventType::CLOSED,
-
-                TaskStatus::CANCELLED =>
-                    TaskLogEventType::CANCELLED,
-
-                default =>
-                    TaskLogEventType::STATUS_CHANGED,
-            };
-
-            $this->createLog(
+        try {
+            return $this->statusTransitionService->change(
                 task: $task,
+                newStatus: $newStatus,
                 actor: $actor,
-                eventType: $eventType,
-                fromStatus: $oldStatus,
-                toStatus: $newStatus,
                 message: $message,
             );
-
-            return $task->fresh();
-        });
+        } catch (DomainException $exception) {
+            throw ValidationException::withMessages([
+                'status' => $exception->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -511,53 +469,4 @@ class TaskService
         ]);
     }
 
-    /**
-     * Validate lifecycle transition.
-     */
-    private function validateStatusTransition(
-        TaskStatus $from,
-        TaskStatus $to,
-    ): void {
-        $allowed = match ($from) {
-            TaskStatus::CREATED => [
-                TaskStatus::ASSIGNED,
-                TaskStatus::AWAITING_ACCEPTANCE,
-                TaskStatus::CANCELLED,
-            ],
-
-            TaskStatus::ASSIGNED => [
-                TaskStatus::IN_PROGRESS,
-                TaskStatus::CANCELLED,
-            ],
-
-            TaskStatus::AWAITING_ACCEPTANCE => [
-                TaskStatus::ACCEPTED,
-                TaskStatus::CANCELLED,
-            ],
-
-            TaskStatus::ACCEPTED => [
-                TaskStatus::IN_PROGRESS,
-                TaskStatus::CANCELLED,
-            ],
-
-            TaskStatus::IN_PROGRESS => [
-                TaskStatus::CLOSED,
-                TaskStatus::CANCELLED,
-            ],
-
-            TaskStatus::CLOSED => [],
-
-            TaskStatus::CANCELLED => [
-                TaskStatus::CREATED,
-            ],
-        };
-
-        if (! in_array($to, $allowed, true)) {
-            throw ValidationException::withMessages([
-                'status' =>
-                    "Invalid task status transition: "
-                    . "{$from->value} → {$to->value}.",
-            ]);
-        }
-    }
 }

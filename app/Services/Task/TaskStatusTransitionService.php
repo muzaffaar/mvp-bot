@@ -407,6 +407,13 @@ class TaskStatusTransitionService
     |--------------------------------------------------------------------------
     */
 
+    /**
+     * Gated by the TARGET status being entered, mirroring exactly how
+     * TaskStatusCallback (the Telegram bot) authorizes each button press —
+     * so a task's status can never be changed by "everyone" through this
+     * shared entry point, whether the caller is the bot or the admin
+     * panel's kanban board.
+     */
     private function authorize(
         Task $task,
         TaskStatus $newStatus,
@@ -416,74 +423,77 @@ class TaskStatusTransitionService
         $isAssignor = $task->assignor_id === $actor->id;
 
         /*
-         * =========================================================
-         * ASSIGNEE ACTIONS
-         * =========================================================
-         *
-         * ASSIGNED -> ACCEPTED
-         * ACCEPTED -> IN_PROGRESS
-         * IN_PROGRESS -> AWAITING_ACCEPTANCE
+         * Qabul qilish: ASSIGNED -> ACCEPTED. Only the assignee.
          */
-        $isAssigneeAction = match (true) {
-            $task->status === TaskStatus::ASSIGNED
-                && $newStatus === TaskStatus::ACCEPTED => true,
-
-            $task->status === TaskStatus::ACCEPTED
-                && $newStatus === TaskStatus::IN_PROGRESS => true,
-
-            $task->status === TaskStatus::IN_PROGRESS
-                && $newStatus === TaskStatus::AWAITING_ACCEPTANCE => true,
-
-            default => false,
-        };
-
-        if ($isAssigneeAction && ! $isAssignee) {
+        if ($newStatus === TaskStatus::ACCEPTED && ! $isAssignee) {
             throw new AuthorizationException(
                 'Faqat vazifa biriktirilgan xodim ushbu amalni bajara oladi.'
             );
         }
 
         /*
-         * =========================================================
-         * ASSIGNOR ACTIONS
-         * =========================================================
-         *
-         * AWAITING_ACCEPTANCE -> ACCEPTED
-         * AWAITING_ACCEPTANCE -> IN_PROGRESS
-         * ACCEPTED -> CLOSED
-         */
-        $isAssignorAction = match (true) {
-            $task->status === TaskStatus::AWAITING_ACCEPTANCE
-                && in_array(
-                    $newStatus,
-                    [
-                        TaskStatus::ACCEPTED,
-                        TaskStatus::IN_PROGRESS,
-                    ],
-                    true
-                ) => true,
-
-            $task->status === TaskStatus::ACCEPTED
-                && $newStatus === TaskStatus::CLOSED => true,
-
-            default => false,
-        };
-
-        // if ($isAssignorAction && ! $isAssignor) {
-        //     throw new AuthorizationException(
-        //         'Faqat vazifani biriktirgan xodim ushbu amalni amalga oshira oladi.'
-        //     );
-        // }
-
-        /*
-         * =========================================================
-         * CANCELLATION
-         * =========================================================
+         * Ishni boshlash: ACCEPTED -> IN_PROGRESS. Only the assignee.
          */
         if (
-            $newStatus === TaskStatus::CANCELLED
+            $newStatus === TaskStatus::IN_PROGRESS
+            && $task->status === TaskStatus::ACCEPTED
+            && ! $isAssignee
+        ) {
+            throw new AuthorizationException(
+                'Faqat vazifa biriktirilgan xodim ushbu amalni bajara oladi.'
+            );
+        }
+
+        /*
+         * Bajarildi: IN_PROGRESS -> AWAITING_ACCEPTANCE. Only the assignee
+         * (the comment-required rule lives at the request-validation layer,
+         * not here — this only gates WHO may make the move).
+         */
+        if ($newStatus === TaskStatus::AWAITING_ACCEPTANCE && ! $isAssignee) {
+            throw new AuthorizationException(
+                'Faqat vazifa biriktirilgan xodim ushbu amalni bajara oladi.'
+            );
+        }
+
+        /*
+         * Qaytarish: AWAITING_ACCEPTANCE -> IN_PROGRESS. This is the
+         * assignor sending the completed work back for rework — distinct
+         * from "Ishni boshlash" above, which starts from ACCEPTED. Only
+         * the assignor.
+         */
+        if (
+            $newStatus === TaskStatus::IN_PROGRESS
+            && $task->status === TaskStatus::AWAITING_ACCEPTANCE
             && ! $isAssignor
         ) {
+            throw new AuthorizationException(
+                'Faqat vazifani biriktirgan xodim ushbu amalni amalga oshira oladi.'
+            );
+        }
+
+        /*
+         * Tasdiqlash: -> COMPLETION_APPROVED. Only the assignor.
+         */
+        if ($newStatus === TaskStatus::COMPLETION_APPROVED && ! $isAssignor) {
+            throw new AuthorizationException(
+                'Faqat vazifani biriktirgan xodim ushbu amalni amalga oshira oladi.'
+            );
+        }
+
+        /*
+         * Yopish: -> CLOSED (whether from ACCEPTED or COMPLETION_APPROVED).
+         * Only the assignor.
+         */
+        if ($newStatus === TaskStatus::CLOSED && ! $isAssignor) {
+            throw new AuthorizationException(
+                'Faqat vazifani biriktirgan xodim ushbu amalni amalga oshira oladi.'
+            );
+        }
+
+        /*
+         * Bekor qilish: -> CANCELLED. Only the assignor.
+         */
+        if ($newStatus === TaskStatus::CANCELLED && ! $isAssignor) {
             throw new AuthorizationException(
                 'Sizda ushbu vazifani bekor qilish huquqi yo‘q.'
             );
@@ -496,11 +506,17 @@ class TaskStatusTransitionService
     |--------------------------------------------------------------------------
     */
 
-    private function validateTransition(
-        TaskStatus $current,
-        TaskStatus $target,
-    ): void {
-        $allowed = match ($current) {
+    /**
+     * The single source of truth for the task lifecycle graph. The panel
+     * and the Telegram bot both change status through
+     * TaskService::changeStatus() / here, so they can never drift into two
+     * different sets of "valid" transitions by hand — and it's public so
+     * the kanban board can expose the graph to the frontend for live
+     * drag-and-drop feedback without duplicating it a third time in JS.
+     */
+    public function allowedTargets(TaskStatus $current): array
+    {
+        return match ($current) {
             TaskStatus::CREATED => [
                 TaskStatus::ASSIGNED,
                 TaskStatus::AWAITING_ACCEPTANCE,
@@ -533,12 +549,17 @@ class TaskStatusTransitionService
                 TaskStatus::CLOSED,
             ],
 
-            TaskStatus::CLOSED => [],
-
-            TaskStatus::CANCELLED => [],
+            TaskStatus::CLOSED,
+            TaskStatus::CANCELLED,
+            TaskStatus::RETURNED => [],
         };
+    }
 
-        if (! in_array($target, $allowed, true)) {
+    public function validateTransition(
+        TaskStatus $current,
+        TaskStatus $target,
+    ): void {
+        if (! in_array($target, $this->allowedTargets($current), true)) {
             throw new DomainException(
                 sprintf(
                     'Cannot change task status from "%s" to "%s".',
@@ -546,6 +567,28 @@ class TaskStatusTransitionService
                     $target->value
                 )
             );
+        }
+    }
+
+    /**
+     * Boolean form of authorize() + validateTransition(), for callers that
+     * need to know in advance whether an actor may make a specific move
+     * (e.g. the kanban board deciding which columns to light up while a
+     * card is being dragged) rather than attempting the change and
+     * catching an exception.
+     */
+    public function canTransition(
+        Task $task,
+        TaskStatus $target,
+        Staff $actor,
+    ): bool {
+        try {
+            $this->authorize($task, $target, $actor);
+            $this->validateTransition($task->status, $target);
+
+            return true;
+        } catch (AuthorizationException|DomainException) {
+            return false;
         }
     }
 

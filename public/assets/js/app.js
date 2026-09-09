@@ -3420,6 +3420,257 @@ function applyKanbanFilters() {
         openTaskDetail(taskId);
     });
 
+    // Kanban column key -> the TaskStatus value the /tasks/{id}/status
+    // endpoint expects. Must mirror TaskController::KANBAN_COLUMNS.
+    const KANBAN_COLUMN_STATUS_VALUE = {
+        NEW: "created",
+        ASSIGNED: "assigned",
+        ACCEPTED: "accepted",
+        IN_PROGRESS: "in_progress",
+        SUBMITTED: "awaiting_acceptance",
+        APPROVED: "completion_approved",
+        CLOSED: "closed",
+    };
+
+    function moveCardToColumn(card, dropZone) {
+        dropZone.querySelector(".kanban-column__empty")?.remove();
+        dropZone.appendChild(card);
+
+        card.classList.remove("is-dropped");
+        // Reflow so re-adding the class restarts the animation even if the
+        // card is moved twice in a row (e.g. an optimistic move reverted).
+        void card.offsetWidth;
+        card.classList.add("is-dropped");
+        card.addEventListener("animationend", () => card.classList.remove("is-dropped"), { once: true });
+    }
+
+    function updateKanbanColumnCounts() {
+        document.querySelectorAll(".kanban-column[data-status]").forEach((column) => {
+            const key = column.dataset.status;
+            const dropZone = column.querySelector(`[data-kanban-tasks="${key}"]`);
+            const countEl = column.querySelector(`[data-column-count="${key}"]`);
+            if (dropZone && countEl) {
+                countEl.textContent = String(dropZone.querySelectorAll(".task-card").length);
+            }
+        });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Kanban drag & drop
+    |--------------------------------------------------------------------------
+    |
+    | Each card carries its own data-allowed-columns, computed server-side
+    | by TaskController::allowedKanbanColumns() from
+    | TaskStatusTransitionService::canTransition() — the SAME per-task
+    | assignee/assignor authorization and lifecycle graph the
+    | /tasks/{id}/status endpoint itself enforces for THIS actor and THIS
+    | task. A task's status is never "changeable by everyone": two
+    | different cards can (and usually will) light up different columns
+    | while being dragged. The server still re-validates on drop regardless
+    | — this is purely for live feedback so the user isn't surprised by a
+    | rejection only after releasing the mouse.
+    */
+    function bindKanbanDragAndDrop() {
+        const board = document.querySelector(".tasks-view--kanban");
+        if (!board) return;
+
+        let dragged = null;
+
+        function allowedColumnsFor(card) {
+            return (card.dataset.allowedColumns || "").split(",").filter(Boolean);
+        }
+
+        function isAllowed(card, toColumn) {
+            return allowedColumnsFor(card).includes(toColumn);
+        }
+
+        function clearColumnHighlights() {
+            board.querySelectorAll(".kanban-column.is-drop-target, .kanban-column.is-drop-invalid")
+                .forEach((column) => column.classList.remove("is-drop-target", "is-drop-invalid"));
+        }
+
+        board.addEventListener("dragstart", (event) => {
+            const card = event.target.closest(".task-card[data-task-id]");
+            const column = card?.closest("[data-kanban-tasks]");
+            if (!card || !column) return;
+
+            dragged = {
+                id: card.dataset.taskId,
+                fromColumn: column.dataset.kanbanTasks,
+                element: card,
+            };
+
+            event.dataTransfer.effectAllowed = "move";
+            try {
+                event.dataTransfer.setData("text/plain", card.dataset.taskId);
+            } catch (_) {}
+
+            // Deferred so the browser finishes building its native drag
+            // ghost image from the un-faded card first.
+            requestAnimationFrame(() => card.classList.add("is-dragging"));
+        });
+
+        board.addEventListener("dragend", () => {
+            dragged?.element.classList.remove("is-dragging", "is-drop-valid", "is-drop-invalid");
+            clearColumnHighlights();
+            dragged = null;
+        });
+
+        board.querySelectorAll("[data-kanban-tasks]").forEach((dropZone) => {
+            dropZone.addEventListener("dragover", (event) => {
+                if (!dragged) return;
+                event.preventDefault();
+
+                const toColumn = dropZone.dataset.kanbanTasks;
+                const allowed = toColumn !== dragged.fromColumn && isAllowed(dragged.element, toColumn);
+
+                event.dataTransfer.dropEffect = allowed ? "move" : "none";
+                dragged.element.classList.toggle("is-drop-valid", allowed);
+                dragged.element.classList.toggle("is-drop-invalid", !allowed);
+
+                const column = dropZone.closest(".kanban-column");
+                if (!column) return;
+                clearColumnHighlights();
+                column.classList.toggle("is-drop-target", allowed);
+                column.classList.toggle("is-drop-invalid", !allowed);
+            });
+
+            dropZone.addEventListener("dragleave", (event) => {
+                const column = dropZone.closest(".kanban-column");
+                if (column && !column.contains(event.relatedTarget)) {
+                    column.classList.remove("is-drop-target", "is-drop-invalid");
+                }
+            });
+
+            dropZone.addEventListener("drop", (event) => {
+                event.preventDefault();
+                if (!dragged) return;
+
+                const { id: taskId, fromColumn, element: card } = dragged;
+                const toColumn = dropZone.dataset.kanbanTasks;
+
+                clearColumnHighlights();
+                card.classList.remove("is-dragging", "is-drop-valid", "is-drop-invalid");
+                dragged = null;
+
+                if (fromColumn === toColumn) return;
+
+                if (!isAllowed(card, toColumn)) {
+                    card.classList.add("is-drop-rejected");
+                    setTimeout(() => card.classList.remove("is-drop-rejected"), 300);
+                    showToast("Sizda bu topshiriqni ushbu holatga o‘tkazish huquqi yo‘q.", "error");
+                    return;
+                }
+
+                const newStatus = KANBAN_COLUMN_STATUS_VALUE[toColumn];
+
+                // "Bajarildi": submitting completed work strictly requires a
+                // comment (mirrors the Telegram bot's own completion flow).
+                // Ask for it before touching the DOM or the server at all.
+                if (toColumn === "SUBMITTED") {
+                    requestCompletionComment().then((comment) => {
+                        if (comment === null) return; // cancelled
+
+                        moveCardToColumn(card, dropZone);
+                        updateKanbanColumnCounts();
+                        submitStatusChange(card, taskId, fromColumn, newStatus, comment);
+                    });
+                    return;
+                }
+
+                // Optimistic move for a smooth, instant-feeling drop; reverted
+                // below if the server ends up rejecting it.
+                moveCardToColumn(card, dropZone);
+                updateKanbanColumnCounts();
+                submitStatusChange(card, taskId, fromColumn, newStatus, null);
+            });
+        });
+
+        function submitStatusChange(card, taskId, fromColumn, newStatus, comment) {
+            apiRequest(`/tasks/${taskId}/status`, {
+                method: "POST",
+                body: comment ? { status: newStatus, comment } : { status: newStatus },
+            })
+                .then(() => {
+                    const task = state.tasks.find((item) => String(item.id) === String(taskId));
+                    if (task) task.status = newStatus;
+                    showToast("Topshiriq holati yangilandi.", "success");
+                })
+                .catch((error) => {
+                    const originalZone = board.querySelector(`[data-kanban-tasks="${fromColumn}"]`);
+                    if (originalZone) moveCardToColumn(card, originalZone);
+                    updateKanbanColumnCounts();
+                    showToast(error.message, "error");
+                });
+        }
+    }
+
+    // Resolves with the entered comment, or null if the user cancelled.
+    function requestCompletionComment() {
+        const modal = document.getElementById("completion-comment-modal");
+        const form = document.getElementById("completion-comment-form");
+        const textarea = document.getElementById("completion-comment-text");
+        const errorBox = document.getElementById("completion-comment-error");
+
+        if (!modal || !form || !textarea) {
+            return Promise.resolve(window.prompt("Bajarilgan ish haqida izoh yozing:"));
+        }
+
+        return new Promise((resolve) => {
+            textarea.value = "";
+            if (errorBox) errorBox.hidden = true;
+            modal.hidden = false;
+            document.body.classList.add("has-completion-comment-modal");
+            requestAnimationFrame(() => textarea.focus());
+
+            function cleanup(result) {
+                modal.hidden = true;
+                document.body.classList.remove("has-completion-comment-modal");
+                form.removeEventListener("submit", onSubmit);
+                modal.querySelectorAll('[data-action="close-completion-comment"]').forEach((button) =>
+                    button.removeEventListener("click", onCancel)
+                );
+                modal.removeEventListener("click", onBackdropClick);
+                document.removeEventListener("keydown", onKeydown);
+                resolve(result);
+            }
+
+            function onSubmit(event) {
+                event.preventDefault();
+                const value = textarea.value.trim();
+                if (!value) {
+                    if (errorBox) {
+                        errorBox.textContent = "Izoh yozish shart.";
+                        errorBox.hidden = false;
+                    }
+                    textarea.focus();
+                    return;
+                }
+                cleanup(value);
+            }
+
+            function onCancel() {
+                cleanup(null);
+            }
+
+            function onBackdropClick(event) {
+                if (event.target === modal) cleanup(null);
+            }
+
+            function onKeydown(event) {
+                if (event.key === "Escape") cleanup(null);
+            }
+
+            form.addEventListener("submit", onSubmit);
+            modal.querySelectorAll('[data-action="close-completion-comment"]').forEach((button) =>
+                button.addEventListener("click", onCancel)
+            );
+            modal.addEventListener("click", onBackdropClick);
+            document.addEventListener("keydown", onKeydown);
+        });
+    }
+
 function initialize() {
         initializeTheme();
         state.tasks = Array.isArray(db.tasks) ? db.tasks.slice() : [];
@@ -3428,6 +3679,7 @@ function initialize() {
         if (page === "tasks") {
             bindTasks();
             openTaskFromQueryString();
+            bindKanbanDragAndDrop();
         }
         if (page === "people") bindPeople();
         if (page === "chain") renderChain();
