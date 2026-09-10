@@ -2,6 +2,7 @@
 
 namespace App\Services\Task;
 
+use App\Jobs\Task\NotifyTaskRecipients;
 use App\Models\Staff;
 use App\Models\Task;
 use App\Models\TaskTelegramMessage;
@@ -81,16 +82,20 @@ class TaskCreationService
             'assignor',
         ]);
 
-        $this->notifyRecipients(
-            task: $task,
-            creator: $creator,
+        // Dispatched instead of called inline: recipients are other staff,
+        // not the person waiting on this reply, so fanning out their DMs
+        // must not delay the "task created" confirmation sent back to the
+        // requester.
+        NotifyTaskRecipients::dispatch(
+            taskId: $task->id,
+            creatorId: $creator->id,
             chatId: $chatId,
         );
 
         return $task;
     }
 
-    private function notifyRecipients(
+    public function notifyRecipients(
         Task $task,
         Staff $creator,
         int $chatId,

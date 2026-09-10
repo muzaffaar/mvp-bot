@@ -54,6 +54,22 @@ class GeminiClient
                         'mime_type' => 'application/json',
                         'schema' => $schema,
                     ],
+
+                    'generation_config' => [
+                        // The interactions endpoint counts the model's internal
+                        // reasoning steps against this budget, not just the final
+                        // JSON, so it needs much more headroom than the JSON
+                        // payload's own size would suggest.
+                        'max_output_tokens' => 2048,
+
+                        // This is a small, well-specified extraction task, not
+                        // something that benefits from deep reasoning. Minimal
+                        // thinking cuts most of the latency this endpoint's
+                        // always-on reasoning otherwise adds, and skipping the
+                        // summary avoids generating text we never read.
+                        'thinking_level' => 'minimal',
+                        'thinking_summaries' => 'none',
+                    ],
                 ]
             )
             ->throw()
@@ -126,6 +142,13 @@ class GeminiClient
                                 ],
                             ],
                         ],
+                    ],
+
+                    'generationConfig' => [
+                        // Transcription output length scales with the voice
+                        // message's length, unlike interpret()'s compact JSON,
+                        // so this cap is looser to avoid truncating speech.
+                        'maxOutputTokens' => 1024,
                     ],
                 ]
             )

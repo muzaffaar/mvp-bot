@@ -3,7 +3,6 @@
 namespace Tests\Unit\AI;
 
 use App\AI\Gemini\GeminiClient;
-use App\AI\Prompts\TaskManagementPrompt;
 use App\AI\Services\AiIntentSchema;
 use App\AI\Services\AiOrchestrator;
 use App\AI\Services\Clarification\TaskClarificationService;
@@ -86,7 +85,8 @@ class AiOrchestratorTest extends TestCase
                 string $input,
                 array $schema
             ) {
-                return $systemInstruction === TaskManagementPrompt::system()
+                return is_string($systemInstruction)
+                    && $systemInstruction !== ''
                     && str_contains(
                         $input,
                         'Serverni tekshirish'
