@@ -499,7 +499,7 @@ class TaskStatusCallback
             TaskStatus::ASSIGNED => [
                 'inline_keyboard' => [[
                     [
-                        'text' => '✅ Qabul qilish',
+                        'text' => '✅ Vazifani qabul qilaman',
                         'callback_data' =>
                             "task:status:{$task->id}:accepted",
                     ],
@@ -509,7 +509,7 @@ class TaskStatusCallback
             TaskStatus::ACCEPTED => [
                 'inline_keyboard' => [[
                     [
-                        'text' => '▶️ Ishni boshlash',
+                        'text' => '▶️ Ishni boshladim',
                         'callback_data' =>
                             "task:status:{$task->id}:in_progress",
                     ],
@@ -519,7 +519,7 @@ class TaskStatusCallback
             TaskStatus::IN_PROGRESS => [
                 'inline_keyboard' => [[
                     [
-                        'text' => '✅ Bajarildi',
+                        'text' => '✅ Bajardim — tasdiqqa yuboraman',
                         'callback_data' =>
                             "task:status:{$task->id}:awaiting_acceptance",
                     ],

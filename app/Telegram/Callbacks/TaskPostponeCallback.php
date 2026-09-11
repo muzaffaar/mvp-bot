@@ -54,11 +54,12 @@ class TaskPostponeCallback
 
         $this->telegram->sendMessage(
             chatId: $chatId,
-            text: "⏳ <b>Muddatni kechiktirish</b>\n\n"
+            text: "⏳ <b>Muddatni uzaytirishni so‘rash</b>\n\n"
                 . "🔢 <b>Raqam:</b> {$task->task_number}\n"
                 . "📌 <b>Vazifa:</b> " . e($task->title) . "\n"
                 . "📅 <b>Hozirgi muddat:</b> " . TashkentDateTime::format($task->deadline) . "\n\n"
-                . "Qancha vaqtga kechiktirishni tanlang:",
+                . "<i>Muddat darhol o‘zgarmaydi: so‘rov vazifa beruvchiga boradi.</i>\n"
+                . "Qancha vaqt qo‘shishni so‘raysiz?",
             replyMarkup: [
                 'inline_keyboard' => [
                     [
@@ -136,11 +137,11 @@ class TaskPostponeCallback
                 replyMarkup: [
                     'inline_keyboard' => [[
                         [
-                            'text' => '✅ Ruxsat berish',
+                            'text' => '✅ Ha, muddatni uzaytiraman',
                             'callback_data' => "postpone:approve:{$request->id}",
                         ],
                         [
-                            'text' => '❌ Rad etish',
+                            'text' => '❌ Yo‘q, muddat o‘zgarmaydi',
                             'callback_data' => "postpone:reject:{$request->id}",
                         ],
                     ]],

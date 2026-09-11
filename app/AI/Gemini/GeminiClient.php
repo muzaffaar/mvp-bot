@@ -4,6 +4,7 @@ namespace App\AI\Gemini;
 
 use App\AI\Prompts\TaskManagementPrompt;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class GeminiClient
@@ -34,6 +35,8 @@ class GeminiClient
         string $input,
         array $schema,
     ): array {
+        $startedAt = microtime(true);
+
         $response = Http::timeout(60)
             ->retry(3, 500)
             ->withHeaders([
@@ -74,7 +77,8 @@ class GeminiClient
             )
             ->throw()
             ->json();
-            // dd($response);
+
+        $this->logUsage('interpret', $startedAt, $response['usage'] ?? null);
 
         $output = null;
 
@@ -117,6 +121,8 @@ class GeminiClient
         string $audio,
         string $mimeType = 'audio/ogg',
     ): string {
+        $startedAt = microtime(true);
+
         $response = Http::timeout(60)
             ->retry(3, 500)
             ->withHeaders([
@@ -155,6 +161,8 @@ class GeminiClient
             ->throw()
             ->json();
 
+        $this->logUsage('transcribeAudio', $startedAt, $response['usageMetadata'] ?? null);
+
         $text = $response['candidates'][0]['content']['parts'][0]['text']
             ?? null;
 
@@ -165,5 +173,26 @@ class GeminiClient
         }
 
         return trim($text);
+    }
+
+    /**
+     * Logs latency and token usage for a Gemini call. Accepts either the
+     * `interactions` endpoint's usage shape (total_input_tokens,
+     * total_output_tokens, total_thought_tokens, total_tokens) or the
+     * `generateContent` endpoint's usageMetadata shape (promptTokenCount,
+     * candidatesTokenCount, totalTokenCount), normalizing both to the same
+     * log fields so the two endpoints stay comparable.
+     */
+    private function logUsage(string $method, float $startedAt, ?array $usage): void
+    {
+        Log::info('Gemini API call', [
+            'method' => $method,
+            'model' => $this->model,
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            'input_tokens' => $usage['total_input_tokens'] ?? $usage['promptTokenCount'] ?? null,
+            'output_tokens' => $usage['total_output_tokens'] ?? $usage['candidatesTokenCount'] ?? null,
+            'thought_tokens' => $usage['total_thought_tokens'] ?? $usage['thoughtsTokenCount'] ?? null,
+            'total_tokens' => $usage['total_tokens'] ?? $usage['totalTokenCount'] ?? null,
+        ]);
     }
 }

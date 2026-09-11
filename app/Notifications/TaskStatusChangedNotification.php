@@ -258,7 +258,7 @@ class TaskStatusChangedNotification extends Notification
             return [
                 'inline_keyboard' => [[
                     [
-                        'text' => '▶️ Ishni boshlash',
+                        'text' => '▶️ Ishni boshladim',
                         'callback_data' =>
                             "task:status:{$this->task->id}:in_progress",
                     ],
@@ -278,7 +278,7 @@ class TaskStatusChangedNotification extends Notification
             return [
                 'inline_keyboard' => [[
                     [
-                        'text' => '✅ Bajarildi',
+                        'text' => '✅ Bajardim — tasdiqqa yuboraman',
                         'callback_data' =>
                             "task:status:{$this->task->id}:awaiting_acceptance",
                     ],
@@ -304,12 +304,12 @@ class TaskStatusChangedNotification extends Notification
             return [
                 'inline_keyboard' => [[
                     [
-                        'text' => '✅ Tasdiqlash',
+                        'text' => '✅ Ishni tasdiqlayman',
                         'callback_data' =>
                             "task:status:{$this->task->id}:completion_approved",
                     ],
                     [
-                        'text' => '↩️ Qaytarish',
+                        'text' => '↩️ Qayta ishlashga qaytaraman',
                         'callback_data' =>
                             "task:status:{$this->task->id}:in_progress",
                     ],
@@ -334,7 +334,7 @@ class TaskStatusChangedNotification extends Notification
             return [
                 'inline_keyboard' => [[
                     [
-                        'text' => '🔒 Yopish',
+                        'text' => '🔒 Vazifani yopaman',
                         'callback_data' =>
                             "task:status:{$this->task->id}:closed",
                     ],

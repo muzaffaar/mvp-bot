@@ -145,7 +145,7 @@ class CommandHandler
         if ($tasks->isEmpty()) {
             $this->telegram->sendMessage(
                 $chatId,
-                '⏳ Muddatni kechiktirish uchun sizga biriktirilgan, qabul qilingan yoki jarayondagi muddatli vazifa topilmadi.'
+                '⏳ Muddatni uzaytirishni so‘rash uchun mos vazifa topilmadi. Faqat sizga biriktirilgan, muddati belgilangan va hali yakunlanmagan vazifalar uchun so‘rov yuborish mumkin.'
             );
 
             return;
@@ -166,8 +166,9 @@ class CommandHandler
 
         $this->telegram->sendMessage(
             chatId: $chatId,
-            text: "⏳ <b>Muddatni kechiktirish</b>\n\n"
-                . "Quyidagi vazifalardan birini tanlang. Faqat sizga biriktirilgan va <b>Assigned / Accepted / In progress</b> holatidagi muddatli vazifalar ko‘rsatiladi.",
+            text: "⏳ <b>Muddatni uzaytirishni so‘rash</b>\n\n"
+                . "<i>Muddatni vazifa beruvchi o‘zgartiradi — siz faqat so‘rov yuborasiz.</i>\n\n"
+                . "Qaysi vazifa uchun so‘rov yuboramiz? Ro‘yxatda faqat sizga biriktirilgan, muddati bor va <b>biriktirilgan / qabul qilingan / jarayondagi</b> vazifalar bor.",
             replyMarkup: [
                 'inline_keyboard' => $keyboard,
             ],

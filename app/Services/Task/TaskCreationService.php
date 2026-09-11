@@ -121,7 +121,7 @@ class TaskCreationService
         $keyboard = [
             'inline_keyboard' => [[
                 [
-                    'text' => '✅ Qabul qilish',
+                    'text' => '✅ Vazifani qabul qilaman',
                     'callback_data' =>
                         "task:status:{$task->id}:accepted",
                 ],
